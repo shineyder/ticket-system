@@ -1,24 +1,36 @@
 ﻿# ==================== ESTÁGIO DE CONSTRUÇÃO ====================
 FROM composer:2.7 AS builder
 
+# Install necessary build tools and the mongodb extension BEFORE composer install
+RUN apk update && apk add --no-cache autoconf build-base libtool libzip-dev m4 php-pear \
+    && pecl install -o -f mongodb \
+    && docker-php-ext-enable mongodb
+
 WORKDIR /app
-COPY . .
+COPY composer.* ./
 RUN composer install --no-scripts --optimize-autoloader --prefer-dist --no-progress
+COPY . .
 
 # ==================== Estágio de Desenvolvimento ====================
-FROM php:8.3-cli AS dev
+FROM php:8.3-fpm AS dev
 
-RUN docker-php-ext-install xdebug && docker-php-ext-enable xdebug \
+# Install xdebug using PECL
+RUN pecl install -o -f xdebug \
+    && docker-php-ext-enable xdebug \
     && apt-get update -qq && apt-get install -y git librdkafka-dev librdkafka1 libzip-dev unzip \
     && docker-php-ext-install pdo pdo_mysql zip \
     && pecl install -o -f mongodb rdkafka \
     && docker-php-ext-enable mongodb rdkafka \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
-    && wget -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 WORKDIR /var/www
 COPY --from=builder /app .
+COPY .env .env
+
+EXPOSE 8000
+
+CMD ["php-fpm"]
 
 # ==================== ESTÁGIO FINAL (PRODUÇÃO) ====================
 FROM php:8.3-cli
@@ -40,4 +52,4 @@ COPY --from=builder --chown=appuser:appuser /app .
 
 USER appuser
 
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+CMD ["--host=0.0.0.0", "--port=8000"]

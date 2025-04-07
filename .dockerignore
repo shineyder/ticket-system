@@ -1,5 +1,4 @@
 ﻿# .dockerignore - Arquivos ignorados na construção da imagem Docker
-.env
 .git/
 node_modules/
 vendor/
