@@ -1,0 +1,37 @@
+services:
+  app:
+    image: ticket-system:dev
+    env_file: .env
+    volumes:
+      - .:/var/www              # Hot-reload para desenvolvimento
+    ports:
+      - "8080:8000"
+    command: php artisan serve
+    depends_on:
+      - mongo
+      - kafka
+
+  mongo:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - dev_mongodb_data:/data/db
+
+  kafka:
+    image: bitnami/kafka:latest
+    ports:
+      - "9092:9092"
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    depends_on:
+      - zookeeper
+
+  zookeeper:
+    image: bitnami/zookeeper:latest
+    ports:
+      - "2181:2181"
+
+volumes:
+  dev_mongodb_data:

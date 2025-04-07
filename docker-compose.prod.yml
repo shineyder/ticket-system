@@ -1,0 +1,19 @@
+services:
+  app:
+    env_file: .env.prod
+    volumes:
+      - prod_storage:/var/www/storage  # Apenas dados persistentes
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    restart: unless-stopped
+
+  mongo:
+    volumes:
+      - prod_mongodb_data:/data/db     # Volume nomeado para produção
+
+volumes:
+  prod_mongodb_data:
+  prod_storage:
