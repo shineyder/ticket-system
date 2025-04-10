@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Application\Query\GetAllTickets;
+namespace App\Application\UseCases\Queries\GetAllTickets;
 
 class GetAllTicketsQuery
 {

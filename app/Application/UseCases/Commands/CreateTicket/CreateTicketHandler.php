@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Application\Commands\CreateTicket;
+namespace App\Application\UseCases\Commands\CreateTicket;
 
 use App\Domain\Entities\Ticket;
 use App\Domain\Interfaces\Repositories\TicketRepository;

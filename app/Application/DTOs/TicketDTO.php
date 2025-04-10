@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Application\DTO;
+namespace App\Application\DTOs;
 
 // Simples DTO para transferir dados para fora da camada de aplicação/domínio
 class TicketDTO

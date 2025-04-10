@@ -1,9 +1,9 @@
 <?php
 
-namespace App\Application\Query\GetTicketById;
+namespace App\Application\UseCases\Queries\GetTicketById;
 
 use App\Domain\Interfaces\Repositories\TicketRepository;
-use App\Application\DTO\TicketDTO;
+use App\Application\DTOs\TicketDTO;
 
 class GetTicketByIdHandler
 {

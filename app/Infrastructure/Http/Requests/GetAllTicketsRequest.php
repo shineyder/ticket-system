@@ -2,7 +2,7 @@
 
 namespace App\Infrastructure\Http\Requests;
 
-use App\Application\Query\GetAllTickets\GetAllTicketsQuery;
+use App\Application\UseCases\Queries\GetAllTickets\GetAllTicketsQuery;
 use Illuminate\Validation\Rule;
 use Illuminate\Foundation\Http\FormRequest;
 

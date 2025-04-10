@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Application\Query\GetTicketById;
+namespace App\Application\UseCases\Queries\GetTicketById;
 
 class GetTicketByIdQuery
 {

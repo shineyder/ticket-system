@@ -2,14 +2,14 @@
 
 namespace App\Infrastructure\Http\Controllers;
 
-use App\Application\Commands\CreateTicket\CreateTicketCommand;
-use App\Application\Commands\CreateTicket\CreateTicketHandler;
-use App\Application\Commands\ResolveTicket\ResolveTicketCommand;
-use App\Application\Commands\ResolveTicket\ResolveTicketHandler;
-use App\Application\Query\GetAllTickets\GetAllTicketsQuery;
-use App\Application\Query\GetAllTickets\GetAllTicketsHandler;
-use App\Application\Query\GetTicketById\GetTicketByIdQuery;
-use App\Application\Query\GetTicketById\GetTicketByIdHandler;
+use App\Application\UseCases\Commands\CreateTicket\CreateTicketCommand;
+use App\Application\UseCases\Commands\CreateTicket\CreateTicketHandler;
+use App\Application\UseCases\Commands\ResolveTicket\ResolveTicketCommand;
+use App\Application\UseCases\Commands\ResolveTicket\ResolveTicketHandler;
+use App\Application\UseCases\Queries\GetAllTickets\GetAllTicketsQuery;
+use App\Application\UseCases\Queries\GetAllTickets\GetAllTicketsHandler;
+use App\Application\UseCases\Queries\GetTicketById\GetTicketByIdQuery;
+use App\Application\UseCases\Queries\GetTicketById\GetTicketByIdHandler;
 use App\Infrastructure\Http\Requests\CreateTicketRequest;
 use App\Infrastructure\Http\Requests\GetAllTicketsRequest;
 

@@ -1,10 +1,10 @@
 <?php
 
-namespace App\Application\Query\GetAllTickets;
+namespace App\Application\UseCases\Queries\GetAllTickets;
 
 use App\Domain\Interfaces\Repositories\TicketRepository;
-use App\Application\DTO\TicketDTO;
-use App\Application\Query\GetAllTickets\GetAllTicketsQuery;
+use App\Application\DTOs\TicketDTO;
+use App\Application\UseCases\Queries\GetAllTickets\GetAllTicketsQuery;
 
 class GetAllTicketsHandler
 {

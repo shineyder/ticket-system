@@ -1,11 +1,9 @@
 <?php
 
-namespace App\Application\Commands\ResolveTicket;
+namespace App\Application\UseCases\Commands\ResolveTicket;
 
-use App\Domain\Exceptions\InvalidTicketStateException;
 use App\Domain\Exceptions\TicketNotFoundException;
 use App\Domain\Interfaces\Repositories\TicketRepository;
-use App\Domain\ValueObjects\Status;
 use Illuminate\Contracts\Events\Dispatcher;
 
 class ResolveTicketHandler

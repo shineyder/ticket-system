@@ -2,10 +2,10 @@
 
 namespace App\Infrastructure\Providers;
 
-use App\Application\Commands\CreateTicket\CreateTicketHandler;
-use App\Application\Commands\ResolveTicket\ResolveTicketHandler;
-use App\Application\Query\GetAllTickets\GetAllTicketsHandler;
-use App\Application\Query\GetTicketById\GetTicketByIdHandler;
+use App\Application\UseCases\Commands\CreateTicket\CreateTicketHandler;
+use App\Application\UseCases\Commands\ResolveTicket\ResolveTicketHandler;
+use App\Application\UseCases\Queries\GetAllTickets\GetAllTicketsHandler;
+use App\Application\UseCases\Queries\GetTicketById\GetTicketByIdHandler;
 use App\Domain\Interfaces\Repositories\TicketRepository;
 use App\Infrastructure\Persistence\MongoDB\Repositories\MongoTicketRepository;
 use Illuminate\Support\ServiceProvider;

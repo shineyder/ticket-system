@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Application\Commands\ResolveTicket;
+namespace App\Application\UseCases\Commands\ResolveTicket;
 
 class ResolveTicketCommand
 {
