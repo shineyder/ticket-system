@@ -1,10 +1,10 @@
 ﻿# ==================== ESTÁGIO DE CONSTRUÇÃO ====================
-FROM composer:2.7 AS builder
+FROM composer:2.8 AS builder
 
 # Install necessary build tools and the mongodb extension BEFORE composer install
-RUN apk update && apk add --no-cache autoconf build-base libtool libzip-dev m4 php-pear \
-    && pecl install -o -f mongodb \
-    && docker-php-ext-enable mongodb
+RUN apk update && apk add --no-cache autoconf build-base librdkafka-dev libtool libzip-dev m4 php-pear \
+    && pecl install -o -f mongodb-2.0.0 rdkafka \
+    && docker-php-ext-enable mongodb rdkafka
 
 WORKDIR /app
 COPY composer.* ./
@@ -12,15 +12,15 @@ RUN composer install --no-scripts --optimize-autoloader --prefer-dist --no-progr
 COPY . .
 
 # ==================== Estágio de Desenvolvimento ====================
-FROM php:8.3-fpm AS dev
+FROM php:8.4-fpm AS dev
 
 # Install xdebug using PECL
 RUN pecl install -o -f xdebug \
     && docker-php-ext-enable xdebug \
     && apt-get update -qq && apt-get install -y git librdkafka-dev librdkafka1 libzip-dev unzip \
     && docker-php-ext-install pdo pdo_mysql zip \
-    && pecl install -o -f mongodb rdkafka \
-    && docker-php-ext-enable mongodb rdkafka \
+    && pecl install -o -f mongodb \
+    && docker-php-ext-enable mongodb \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -28,19 +28,19 @@ WORKDIR /var/www
 COPY --from=builder /app .
 COPY .env .env
 
-EXPOSE 8000
+EXPOSE 9000
 
 CMD ["php-fpm"]
 
 # ==================== ESTÁGIO FINAL (PRODUÇÃO) ====================
-FROM php:8.3-cli
+FROM php:8.4-cli
 
 # Instala dependências essenciais, configura usuário não-root, permissões e limpa cache em uma única camada
 RUN apt-get update -qq && apt-get install -y \
     librdkafka-dev librdkafka1 libzip-dev \
     && docker-php-ext-install pdo pdo_mysql zip \
-    && pecl install -o -f mongodb rdkafka \
-    && docker-php-ext-enable mongodb rdkafka \
+    && pecl install -o -f mongodb \
+    && docker-php-ext-enable mongodb \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
     && groupadd -r appuser && useradd -r -g appuser appuser \
