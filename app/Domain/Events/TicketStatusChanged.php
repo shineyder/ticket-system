@@ -4,11 +4,13 @@ namespace App\Domain\Events;
 
 use DateTimeImmutable;
 
-class TicketResolved implements DomainEvent
+class TicketStatusChanged implements DomainEvent
 {
     private readonly DateTimeImmutable $occurredOn;
+
     public function __construct(
-        public readonly string $id
+        public readonly string $id,
+        public readonly string $status
     ) {
         $this->occurredOn = new DateTimeImmutable(); // Define o momento da criação do evento
     }

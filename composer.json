@@ -10,7 +10,7 @@
     ],
     "license": "MIT",
     "require": {
-        "php": "^8.2",
+        "php": "^8.3",
         "brick/math": "^0.12",
         "carbonphp/carbon-doctrine-types": "^3.2",
         "dflydev/dot-access-data": "^3.0",

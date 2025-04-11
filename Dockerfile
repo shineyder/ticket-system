@@ -12,15 +12,19 @@ RUN composer install --no-scripts --optimize-autoloader --prefer-dist --no-progr
 COPY . .
 
 # ==================== Estágio de Desenvolvimento ====================
-FROM php:8.4-fpm AS dev
+FROM php:8.3-fpm AS dev
+
+# Copia o executável do Composer do estágio builder
+COPY --from=builder /usr/bin/composer /usr/local/bin/composer
 
 # Install xdebug using PECL
 RUN pecl install -o -f xdebug \
     && docker-php-ext-enable xdebug \
     && apt-get update -qq && apt-get install -y git librdkafka-dev librdkafka1 libzip-dev unzip \
     && docker-php-ext-install pdo pdo_mysql zip \
-    && pecl install -o -f mongodb \
-    && docker-php-ext-enable mongodb \
+    && pecl install -o -f mongodb rdkafka \
+    && docker-php-ext-enable mongodb rdkafka \
+    && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -33,14 +37,15 @@ EXPOSE 9000
 CMD ["php-fpm"]
 
 # ==================== ESTÁGIO FINAL (PRODUÇÃO) ====================
-FROM php:8.4-cli
+FROM php:8.3-cli
 
 # Instala dependências essenciais, configura usuário não-root, permissões e limpa cache em uma única camada
 RUN apt-get update -qq && apt-get install -y \
     librdkafka-dev librdkafka1 libzip-dev \
     && docker-php-ext-install pdo pdo_mysql zip \
-    && pecl install -o -f mongodb \
-    && docker-php-ext-enable mongodb \
+    && pecl install -o -f mongodb rdkafka \
+    && docker-php-ext-enable mongodb rdkafka \
+    && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
     && groupadd -r appuser && useradd -r -g appuser appuser \
