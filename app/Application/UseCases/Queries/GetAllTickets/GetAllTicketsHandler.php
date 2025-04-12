@@ -2,13 +2,13 @@
 
 namespace App\Application\UseCases\Queries\GetAllTickets;
 
-use App\Domain\Interfaces\Repositories\TicketRepository;
 use App\Application\DTOs\TicketDTO;
 use App\Application\UseCases\Queries\GetAllTickets\GetAllTicketsQuery;
+use App\Domain\Interfaces\Repositories\TicketReadRepositoryInterface;
 
 class GetAllTicketsHandler
 {
-    public function __construct(private TicketRepository $ticketRepository)
+    public function __construct(private TicketReadRepositoryInterface $readRepository)
     {
     }
 
@@ -18,25 +18,9 @@ class GetAllTicketsHandler
      */
     public function handle(GetAllTicketsQuery $query): ?array
     {
-        $tickets = $this->ticketRepository->findAll(
+        return $this->readRepository->findAll(
             $query->orderBy,
             $query->orderDirection
         );
-
-        $ticketDTOs = [];
-        if($tickets){
-            foreach ($tickets as $ticket) {
-                $ticketDTO = new TicketDTO(
-                    $ticket->id,
-                    $ticket->title,
-                    $ticket->description,
-                    $ticket->priority->value(),
-                    $ticket->status->value()
-                );
-                $ticketDTOs[] = $ticketDTO;
-            }
-        }
-
-        return $ticketDTOs;
     }
 }

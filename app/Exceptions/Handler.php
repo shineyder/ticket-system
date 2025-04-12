@@ -2,6 +2,7 @@
 
 namespace App\Exceptions;
 
+use App\Domain\Exceptions\AggregateNotFoundException;
 use App\Domain\Exceptions\InvalidTicketStateException;
 use App\Domain\Exceptions\TicketNotFoundException;
 use App\Infrastructure\Persistence\Exceptions\PersistenceOperationFailedException;
@@ -69,6 +70,16 @@ class Handler extends ExceptionHandler
                 return response()->json(
                     ['message' => $e->getMessage() ?: 'Operação não permitida devido ao estado atual do recurso.'],
                     Response::HTTP_CONFLICT // Retorna 409 Conflict
+                );
+            }
+        });
+
+        // Quando uma AggregateNotFoundException ocorrer...
+        $this->renderable(function (AggregateNotFoundException $e, Request $request) {
+            if ($request->expectsJson()) {
+                return response()->json(
+                    ['message' => $e->getMessage() ?: 'Ticket não encontrado.'],
+                    Response::HTTP_NOT_FOUND // Retorna 404 Not Found
                 );
             }
         });

@@ -2,38 +2,43 @@
 
 namespace App\Application\UseCases\Commands\ResolveTicket;
 
-use App\Domain\Exceptions\TicketNotFoundException;
-use App\Domain\Interfaces\Repositories\TicketRepository;
+use App\Domain\Interfaces\Repositories\TicketEventStoreInterface;
 use Illuminate\Contracts\Events\Dispatcher;
 
 class ResolveTicketHandler
 {
     public function __construct(
-        private TicketRepository $ticketRepository,
+        private TicketEventStoreInterface $eventStore,
         private Dispatcher $eventDispatcher
     ) {}
 
+    /**
+     * Manipula o comando para resolver um Ticket usando Event Sourcing.
+     *
+     * @param ResolveTicketCommand $command Contém o ID do ticket a ser resolvido.
+     * @return void
+     * @throws AggregateNotFoundException Se o ticket não for encontrado.
+     * @throws \App\Domain\Exceptions\InvalidTicketStateException Se a regra de negócio for violada no agregado.
+     * @throws \Exception Se ocorrer erro ao salvar os eventos.
+     */
     public function handle(ResolveTicketCommand $command): void
     {
-        $ticket = $this->ticketRepository->findById($command->ticketId);
+        // Carregamento do Agregado via Event Store
+        $ticket = $this->eventStore->load($command->ticketId);
 
-        if (!$ticket) {
-            throw new TicketNotFoundException("Ticket com ID {$command->ticketId} não encontrado.");
-        }
-
-        // Chama o método de domínio para alterar o estado
+        // Execução da Lógica de Negócio no Agregado
         $ticket->resolve();
 
-        // Persiste a alteração
-        $this->ticketRepository->save($ticket);
+        // Persistência via Event Store e retorno dos eventos salvos
+        $savedEvents = $this->eventStore->save($ticket);
 
-        // Libera e despacha os eventos
-        $events = $ticket->releaseEvents();
-        foreach ($events as $event) {
-            // Use o dispatcher de eventos do Laravel
-            $this->eventDispatcher->dispatch($event);
+        // Dispara o evento de aplicação se houver eventos salvos
+        if (!empty($savedEvents)) {
+            $this->eventDispatcher->dispatch(
+                new DomainEventsPersisted($savedEvents, $ticket->getId(), 'Ticket')
+            );
         }
 
-        // Commands geralmente não retornam dados, apenas indicam sucesso/falha (via exceção)
+        // Commands geralmente não retornam dados, sucesso é implícito se nenhuma exceção foi lançada.
     }
 }

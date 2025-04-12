@@ -2,30 +2,24 @@
 
 namespace App\Application\UseCases\Queries\GetTicketById;
 
-use App\Domain\Interfaces\Repositories\TicketRepository;
 use App\Application\DTOs\TicketDTO;
+use App\Domain\Interfaces\Repositories\TicketReadRepositoryInterface;
 
 class GetTicketByIdHandler
 {
-    public function __construct(private TicketRepository $ticketRepository)
+    public function __construct(private TicketReadRepositoryInterface $readRepository)
     {
     }
 
     // Retorna um TicketDTO ou lança exception
     public function handle(GetTicketByIdQuery $query): ?TicketDTO
     {
-        $ticket = $this->ticketRepository->findById($query->ticketId);
+        $ticketDto = $this->readRepository->findById($query->ticketId);
 
-        if (!$ticket) {
+        if (!$ticketDto) {
             throw new TicketNotFoundException("Ticket com ID {$query->ticketId} não encontrado.");
         }
 
-        return new TicketDTO(
-            $ticket->id,
-            $ticket->title,
-            $ticket->description,
-            $ticket->priority->value(),
-            $ticket->status->value()
-        );
+        return $ticketDto;
     }
 }

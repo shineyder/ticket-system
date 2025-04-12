@@ -25,7 +25,7 @@ class TicketController extends Controller
         // $request->validatedData() para obter apenas os dados validados
         $validated = $request->validatedData();
 
-        $command = new CreateTicketCommand(
+        $command = CreateTicketCommand::createWithUuid(
             $validated['title'],
             $validated['description'] ?? null,
             $validated['priority'] ?? 'low'

@@ -2,12 +2,11 @@
 
 namespace App\Infrastructure\Providers;
 
-use App\Application\UseCases\Commands\CreateTicket\CreateTicketHandler;
-use App\Application\UseCases\Commands\ResolveTicket\ResolveTicketHandler;
-use App\Application\UseCases\Queries\GetAllTickets\GetAllTicketsHandler;
-use App\Application\UseCases\Queries\GetTicketById\GetTicketByIdHandler;
-use App\Domain\Interfaces\Repositories\TicketRepository;
-use App\Infrastructure\Persistence\MongoDB\Repositories\MongoTicketRepository;
+use App\Domain\Interfaces\Repositories\TicketEventStoreInterface;
+use App\Domain\Interfaces\Repositories\TicketReadRepositoryInterface;
+use App\Infrastructure\Persistence\MongoDB\MongoConnection;
+use App\Infrastructure\Persistence\MongoDB\Repositories\MongoEventStore;
+use App\Infrastructure\Persistence\MongoDB\Repositories\MongoTicketReadRepository;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -22,12 +21,17 @@ class AppServiceProvider extends ServiceProvider
             return new MongoConnection();
         });
 
-        // Bind the interface to the concrete implementation
-        $this->app->bind(TicketRepository::class, MongoTicketRepository::class);
+        // Bind da interface do Event Store para a implementação MongoDB
+        $this->app->bind(
+            TicketEventStoreInterface::class,
+            MongoEventStore::class
+        );
 
-        // No futuro haverá Event Store e Read Models
-        // $this->app->bind(TicketEventStoreInterface::class, MongoTicketEventStore::class);
-        // $this->app->bind(TicketReadRepositoryInterface::class, MongoTicketReadRepository::class);
+        // Bind da interface do Read Repository
+        $this->app->bind(
+            TicketReadRepositoryInterface::class,
+            MongoTicketReadRepository::class
+        );
     }
 
     /**

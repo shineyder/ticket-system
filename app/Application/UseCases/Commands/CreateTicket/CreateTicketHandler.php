@@ -2,44 +2,47 @@
 
 namespace App\Application\UseCases\Commands\CreateTicket;
 
+use App\Application\Events\DomainEventsPersisted;
 use App\Domain\Entities\Ticket;
-use App\Domain\Interfaces\Repositories\TicketRepository;
-use App\Domain\ValueObjects\Priority;
-use App\Domain\ValueObjects\Status;
+use App\Domain\Interfaces\Repositories\TicketEventStoreInterface;
 use Illuminate\Contracts\Events\Dispatcher;
 
 class CreateTicketHandler
 {
     public function __construct(
-        private TicketRepository $ticketRepository,
+        private TicketEventStoreInterface $eventStore,
         private Dispatcher $eventDispatcher
     ) {}
 
+     /**
+     * Manipula o comando para criar um novo Ticket usando Event Sourcing.
+     *
+     * @param CreateTicketCommand $command Dados para criação do ticket.
+     * @return string O ID do ticket criado.
+     * @throws \Exception Se ocorrer erro ao salvar os eventos.
+     */
     public function handle(CreateTicketCommand $command): string // Retorna o ID do ticket criado
     {
-        $id = $this->ticketRepository->nextIdentity();
-        $priority = Priority::fromString($command->priority);
-        $status = new Status(Status::OPEN); // Status inicial
+        $id = $command->id;
 
-        // Cria a entidade. O evento TicketCreated será disparado aqui dentro.
-        $ticket = new Ticket(
+        // Cria o agregado. O evento TicketCreated será disparado e aplicado aqui dentro.
+        $ticket = Ticket::create(
             $id,
             $command->title,
             $command->description,
-            $priority,
-            $status
+            $command->priority
         );
 
-        // Persiste a entidade
-        $this->ticketRepository->save($ticket);
+        // Persistência via Event Store e retorno dos eventos salvos
+        $savedEvents = $this->eventStore->save($ticket);
 
-        // Libera e despacha os eventos
-        $events = $ticket->releaseEvents();
-        foreach ($events as $event) {
-            // Use o dispatcher de eventos do Laravel
-            $this->eventDispatcher->dispatch($event);
+        // Dispara o evento de aplicação se houver eventos salvos
+        if (!empty($savedEvents)) {
+            $this->eventDispatcher->dispatch(
+                new DomainEventsPersisted($savedEvents, $ticket->getId(), 'Ticket')
+            );
         }
 
-        return $id; // Retorna o ID para referência
+        return $id;
     }
 }
