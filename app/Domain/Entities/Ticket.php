@@ -85,8 +85,9 @@ class Ticket {
 
     /**
      * Aplica o estado inicial quando um TicketCreated ocorre.
+     * @internal Este método é chamado dinamicamente pelo método apply() via getApplyMethodName().
      */
-    private function applyTicketCreated(TicketCreated $event): void {
+    private function applyTicketCreated(TicketCreated $event): void {// NOSONAR
         // Define o estado interno com base nos dados do evento
         $this->title = $event->title;
         $this->description = $event->description;
@@ -97,8 +98,9 @@ class Ticket {
 
     /**
      * Aplica a mudança de estado quando um TicketResolved ocorre.
+     * @internal Este método é chamado dinamicamente pelo método apply() via getApplyMethodName().
      */
-    private function applyTicketResolved(TicketResolved $event): void {
+    private function applyTicketResolved(TicketResolved $event): void {// NOSONAR
         // Muda o estado interno
         $this->status = new Status(Status::RESOLVED);
         $this->resolvedAt = $event->getOccurredOn();
@@ -106,8 +108,9 @@ class Ticket {
 
     /**
      * Aplica a mudança de estado quando um TicketStatusChanged ocorre.
+     * @internal Este método é chamado dinamicamente pelo método apply() via getApplyMethodName().
      */
-    private function applyTicketStatusChanged(TicketStatusChanged $event): void {
+    private function applyTicketStatusChanged(TicketStatusChanged $event): void {// NOSONAR
         $this->status = new Status($event->status);
     }
 

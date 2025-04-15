@@ -8,12 +8,19 @@ use App\Domain\Exceptions\AggregateNotFoundException;
 use App\Domain\Interfaces\Repositories\TicketEventStoreInterface;
 use App\Domain\ValueObjects\Priority;
 use App\Domain\ValueObjects\Status;
+use App\Infrastructure\Persistence\Exceptions\EventClassNotFoundException;
+use App\Infrastructure\Persistence\Exceptions\EventInstantiateFailedException;
+use App\Infrastructure\Persistence\Exceptions\EventLoadFailedException;
+use App\Infrastructure\Persistence\Exceptions\EventPersistenceFailedException;
 use App\Infrastructure\Persistence\MongoDB\MongoConnection;
 use MongoDB\Collection;
 use MongoDB\Driver\Exception\Exception as MongoDBDriverException;
 use MongoDB\BSON\UTCDateTime;
+use MongoDB\BSON\ObjectId;
 use DateTimeImmutable;
 use Exception;
+use ReflectionNamedType;
+use ReflectionParameter;
 use Throwable;
 
 /**
@@ -24,6 +31,7 @@ class MongoEventStore implements TicketEventStoreInterface
 {
     private Collection $collection; // Armazena a coleção MongoDB
     private const COLLECTION_NAME = 'ticket_events'; // Nome da coleção para os eventos
+    private array $valueObjectFactories;
 
     /**
      * Construtor que injeta a classe MongoConnection personalizada.
@@ -37,6 +45,21 @@ class MongoEventStore implements TicketEventStoreInterface
         $this->collection = $this->connection
             ->getDatabase()
             ->selectCollection(self::COLLECTION_NAME);
+
+        // Inicializa o mapeamento de VOs
+        $this->initializeValueObjectFactories();
+    }
+
+    /**
+     * Inicializa o mapeamento de fábricas de Value Objects.
+     * Facilita a adição de novos VOs sem alterar a lógica principal de instanciação.
+     */
+    private function initializeValueObjectFactories(): void
+    {
+        $this->valueObjectFactories = [
+            Status::class => fn($value) => new Status($value),
+            Priority::class => fn($value) => new Priority((int)$value)
+        ];
     }
 
     /**
@@ -45,7 +68,7 @@ class MongoEventStore implements TicketEventStoreInterface
      *
      * @param Ticket $ticket O agregado Ticket contendo novos eventos.
      * @return DomainEvent[] Retorna os eventos que foram efetivamente salvos.
-     * @throws \Exception Em caso de falha na persistência ou na transação.
+     * @throws EventPersistenceFailedException Em caso de falha na persistência ou na transação.
      */
     public function save(Ticket $ticket): array
     {
@@ -83,7 +106,7 @@ class MongoEventStore implements TicketEventStoreInterface
                 $session->abortTransaction();
             }
             // Relança a exceção encapsulada para a camada superior
-            throw new Exception("Falha ao salvar eventos para o agregado {$aggregateId}: " . $e->getMessage(), 0, $e);
+            throw new EventPersistenceFailedException($aggregateId, $e);
         } finally {
             $session->endSession(); // Sempre termina a sessão, independentemente do resultado
         }
@@ -127,7 +150,7 @@ class MongoEventStore implements TicketEventStoreInterface
             throw $e;
         } catch (Throwable $e) {
             // Captura qualquer outro erro durante o carregamento/reconstituição
-            throw new Exception("Falha ao carregar agregado {$aggregateId}: " . $e->getMessage(), 0, $e);
+            throw new EventLoadFailedException($aggregateId, $e->getMessage(), $e);
         }
     }
 
@@ -161,26 +184,14 @@ class MongoEventStore implements TicketEventStoreInterface
      */
     private function prepareEventDocument(DomainEvent $event, string $aggregateId, int $sequenceNumber): array
     {
-        // Serializa as propriedades públicas do evento para o payload.
-        $payload = [];
-        $reflection = new \ReflectionClass($event);
-        // Itera sobre propriedades públicas readonly
-        foreach ($reflection->getProperties(\ReflectionProperty::IS_READONLY | \ReflectionProperty::IS_PUBLIC) as $property) {
-            $payload[$property->getName()] = $property->getValue($event);
-        }
-        // Adiciona propriedades públicas não-readonly se houver (menos comum em eventos imutáveis)
-        foreach ($reflection->getProperties(\ReflectionProperty::IS_PUBLIC & ~\ReflectionProperty::IS_READONLY) as $property) {
-            if ($property->isInitialized($event)) { // Evita erro se não inicializada
-                $payload[$property->getName()] = $property->getValue($event);
-            }
-        }
+        $payloadData = $event->toPayload();
 
         return [
-            '_id' => new \MongoDB\BSON\ObjectId(), // Gera um ObjectId único para o documento do evento
+            '_id' => new ObjectId(), // Gera um ObjectId único para o documento do evento
             'aggregate_id' => $aggregateId,
             'aggregate_type' => 'Ticket', // Tipo do agregado
             'event_type' => get_class($event), // Classe do evento para reconstituição
-            'payload' => json_encode($payload), // Serializa o payload como JSON
+            'payload' => json_encode($payloadData), // Serializa o payload como JSON
             'sequence_number' => $sequenceNumber, // Número de ordem do evento para este agregado
             'occurred_on' => new UTCDateTime($event->getOccurredOn()), // Converte para BSON UTCDateTime
             'version' => 1, // Versão do schema do evento
@@ -200,83 +211,106 @@ class MongoEventStore implements TicketEventStoreInterface
         $eventType = $data['event_type'];
 
         if (!class_exists($eventType)) {
-            throw new Exception("Classe de evento '{$eventType}' não encontrada durante a reconstituição.");
+            throw new EventClassNotFoundException($eventType);
         }
 
-        $payload = json_decode($data['payload'], true);
-        // Converte BSON UTCDateTime de volta para DateTimeImmutable
-        $occurredOn = $data['occurred_on'] instanceof UTCDateTime
-            ? $data['occurred_on']->toDateTime()->setTimezone(new \DateTimeZone(date_default_timezone_get())) // Timezone local
-            : new DateTimeImmutable('@' . $data['occurred_on']); // Fallback se não for UTCDateTime (improvável)
+        try{
+            $payload = $this->decodePayload($data);
 
-        // Tenta instanciar o evento usando Reflection para mapear o payload aos parâmetros do construtor.
-        // Assume que os nomes no payload correspondem aos nomes dos parâmetros.
-        try {
-            $reflectionClass = new \ReflectionClass($eventType);
-            $constructor = $reflectionClass->getConstructor();
-            $args = [];
+            // Converte para DateTimeImmutable aqui para garantir o tipo correto
+            $occurredOn = $this->convertOccurredOnToImmutable($data);
 
-            if ($constructor) {
-                foreach ($constructor->getParameters() as $param) {
-                    $paramName = $param->getName();
-
-                    // Verifica se o parâmetro existe no payload JSON
-                    if (array_key_exists($paramName, $payload)) {
-                        $valueFromPayload = $payload[$paramName]; // Valor do payload
-                        $paramType = $param->getType(); // Obtém o tipo esperado pelo construtor
-
-                        // --- Tratamento para Value Objects ---
-                        if ($paramType instanceof \ReflectionNamedType && !$paramType->isBuiltin()) {
-                            $typeName = $paramType->getName();
-
-                            // Se o tipo esperado for Status, cria uma instância de Status
-                            if ($typeName === Status::class) {
-                                // Assume que o payload contém o valor string do status
-                                $args[$paramName] = new Status($valueFromPayload);
-                                continue; // Pula para o próximo parâmetro
-                            }
-
-                            // Se o tipo esperado for Priority, cria uma instância de Priority
-                            if ($typeName === Priority::class) {
-                                // Assume que o payload contém o valor int da prioridade
-                                // Garante que seja int, mesmo que o JSON o tenha como string
-                                $args[$paramName] = new Priority((int)$valueFromPayload);
-                                continue; // Pula para o próximo parâmetro
-                            }
-                        }
-                        // --- Fim do Tratamento para Value Objects ---
-
-                        // Se não for um VO conhecido, usa o valor diretamente do payload
-                        $args[$paramName] = $valueFromPayload;
-
-                    } elseif ($param->isDefaultValueAvailable()) {
-                        // Se não está no payload mas tem valor padrão, usa o padrão
-                        $args[$paramName] = $param->getDefaultValue();
-                    }
-                }
-            }
-
-            $event = $reflectionClass->newInstanceArgs($args);
-
-            // Tenta definir occurredOn via Reflection se for uma propriedade privada/protegida
-            // e não foi definida pelo construtor.
-            if ($reflectionClass->hasProperty('occurredOn')) {
-                $prop = $reflectionClass->getProperty('occurredOn');
-                if ($prop->isReadOnly() && !$prop->isInitialized($event)) {
-                    // Se for readonly e não inicializada, precisamos usar reflection para "enganar"
-                    \Closure::bind(function ($event, $occurredOn) {
-                        $event->occurredOn = $occurredOn;
-                    }, null, $eventType)->__invoke($event, $occurredOn);
-                } elseif (!$prop->isPublic() && !$prop->isReadOnly()) {
-                    $prop->setAccessible(true);
-                    $prop->setValue($event, $occurredOn);
-                    $prop->setAccessible(false);
-                }
-            }
-
-            return $event;
+            return $this->instantiateEvent($eventType, $payload, $occurredOn);
         } catch (\ReflectionException | \TypeError | Exception $e) {
-            throw new Exception("Falha ao instanciar evento '{$eventType}': " . $e->getMessage(), 0, $e);
+            throw new EventInstantiateFailedException($eventType, $e);
         }
+    }
+
+    private function decodePayload(array $data): array
+    {
+        return json_decode($data['payload'], true);
+    }
+
+    private function convertOccurredOnToImmutable(array $data): DateTimeImmutable
+    {
+        $occurredOn = $data['occurred_on'];
+        if ($occurredOn instanceof UTCDateTime) {
+            $dateTime = $occurredOn->toDateTime()
+            ->setTimezone(new \DateTimeZone(date_default_timezone_get())); // Timezone local
+            return DateTimeImmutable::createFromMutable($dateTime);
+        }
+        return new DateTimeImmutable('@' . $occurredOn); // Se não for UTCDateTime (improvável)
+    }
+
+    /**
+     * Instancia um objeto DomainEvent usando seu construtor e os dados fornecidos.
+     *
+     * @param string $eventType Classe do evento.
+     * @param array $payload Dados do payload.
+     * @param DateTimeImmutable $occurredOn Momento da ocorrência.
+     * @return DomainEvent
+     * @throws ReflectionException | TypeError | Exception
+     */
+    private function instantiateEvent(string $eventType, array $payload, DateTimeImmutable $occurredOn): DomainEvent
+    {
+        $reflectionClass = new \ReflectionClass($eventType);
+        $constructor = $reflectionClass->getConstructor();
+        $args = [];
+
+        if ($constructor) {
+            foreach ($constructor->getParameters() as $param) {
+                // Delega a lógica de resolução do valor para o método auxiliar
+                $args[$param->getName()] = $this->resolveConstructorArgument(
+                    $param,
+                    $payload,
+                    $occurredOn
+                );
+            }
+        }
+
+        // Instancia o evento passando todos os argumentos resolvidos
+        return $reflectionClass->newInstanceArgs(array_values($args));
+    }
+
+    /**
+     * Resolve o valor para um único parâmetro do construtor do evento.
+     * Encapsula a lógica de verificar payload, VOs, occurredOn e valores padrão.
+     *
+     * @param ReflectionParameter $param O parâmetro do construtor sendo resolvido.
+     * @param array $payload O payload decodificado do evento.
+     * @param DateTimeImmutable $occurredOn O timestamp do evento.
+     * @return mixed O valor resolvido para o argumento.
+     * @throws \InvalidArgumentException Se um parâmetro obrigatório não puder ser resolvido.
+     */
+    private function resolveConstructorArgument(
+        ReflectionParameter $param,
+        array $payload,
+        DateTimeImmutable $occurredOn
+    ): mixed {
+        $paramName = $param->getName();
+        $paramType = $param->getType();
+
+        if ($paramName === 'occurredOn') {
+            return $occurredOn;
+        }
+
+        // Verificar se o parâmetro existe no payload
+        if (array_key_exists($paramName, $payload)) {
+            $valueFromPayload = $payload[$paramName];
+
+            // Tentar instanciar como Value Object, se aplicável
+            if ($paramType instanceof ReflectionNamedType && !$paramType->isBuiltin()) {
+                $typeName = $paramType->getName();
+                // Verifica se existe uma fábrica registrada para este tipo de VO
+                if (isset($this->valueObjectFactories[$typeName])) {
+                    // Chama a função de fábrica correspondente
+                    return ($this->valueObjectFactories[$typeName])($valueFromPayload);
+                }
+            }
+        }
+
+        // Se for um parâmetro do tipo primitivo retorna o valor do payload
+        // Se não houver valor fornecido então é um parâmetro opcional não fornecido e sem default, retorna null
+        return $valueFromPayload ?? null;
     }
 }

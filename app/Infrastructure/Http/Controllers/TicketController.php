@@ -12,6 +12,7 @@ use App\Application\UseCases\Queries\GetTicketById\GetTicketByIdQuery;
 use App\Application\UseCases\Queries\GetTicketById\GetTicketByIdHandler;
 use App\Infrastructure\Http\Requests\CreateTicketRequest;
 use App\Infrastructure\Http\Requests\GetAllTicketsRequest;
+use Illuminate\Routing\Controller;
 
 class TicketController extends Controller
 {
@@ -22,13 +23,13 @@ class TicketController extends Controller
         // A validação já foi feita automaticamente pelo Laravel!
         // Se a validação falhar, o Laravel retorna uma resposta de erro JSON
 
-        // $request->validatedData() para obter apenas os dados validados
+        // Obter apenas os dados validados
         $validated = $request->validatedData();
 
         $command = CreateTicketCommand::createWithUuid(
             $validated['title'],
-            $validated['description'] ?? null,
-            $validated['priority'] ?? 'low'
+            $validated['description'],
+            $validated['priority']
         );
 
         $ticketId = $createHandler->handle($command);

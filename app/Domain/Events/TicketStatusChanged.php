@@ -10,9 +10,12 @@ class TicketStatusChanged implements DomainEvent
 
     public function __construct(
         public readonly string $id,
-        public readonly string $status
+        public readonly string $status,
+        ?DateTimeImmutable $occurredOn = null
     ) {
-        $this->occurredOn = new DateTimeImmutable(); // Define o momento da criação do evento
+        // Se $occurredOn for null (novo evento), usa new DateTimeImmutable()
+        // Se $occurredOn for fornecido (reconstituição), usa o valor fornecido
+        $this->occurredOn = $occurredOn ?? new DateTimeImmutable(); // Define o momento da criação do evento
     }
 
     /**
@@ -29,5 +32,15 @@ class TicketStatusChanged implements DomainEvent
     public function getOccurredOn(): DateTimeImmutable
     {
         return $this->occurredOn;
+    }
+
+    /**
+     * Retorna os dados específicos deste evento para o payload.
+     *
+     * @return array<string, mixed>
+     */
+    public function toPayload(): array
+    {
+        return [];
     }
 }

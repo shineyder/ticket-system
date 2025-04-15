@@ -2,6 +2,8 @@
 
 namespace App\Application\UseCases\Commands\CreateTicket;
 
+use Illuminate\Support\Str;
+
 class CreateTicketCommand
 {
     public function __construct(

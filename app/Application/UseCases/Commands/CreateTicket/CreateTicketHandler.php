@@ -21,7 +21,7 @@ class CreateTicketHandler
      * @return string O ID do ticket criado.
      * @throws \Exception Se ocorrer erro ao salvar os eventos.
      */
-    public function handle(CreateTicketCommand $command): string // Retorna o ID do ticket criado
+    public function handle(CreateTicketCommand $command): string
     {
         $id = $command->id;
 

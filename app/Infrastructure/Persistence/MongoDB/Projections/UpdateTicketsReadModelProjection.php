@@ -70,6 +70,14 @@ class UpdateTicketsReadModelProjection
      */
     private function applyEventToDTO(mixed $domainEvent, ?TicketDTO $currentDto): ?TicketDTO
     {
+        if(get_class($domainEvent) === TicketStatusChanged::class){
+            if($domainEvent->status === Status::RESOLVED){
+                $resolveAtDate = $domainEvent->getOccurredOn();
+            }else{
+                $resolveAtDate = $currentDto->resolvedAt;
+            }
+        }
+        
         return match (get_class($domainEvent)) {
             TicketCreated::class => new TicketDTO(
                 id: $domainEvent->aggregateId,
@@ -86,7 +94,7 @@ class UpdateTicketsReadModelProjection
             ) : null, // Não faz sentido resolver um ticket que não foi criado
             TicketStatusChanged::class => $currentDto ? $currentDto->withStatus(
                 $domainEvent->status, // Assume que o evento tem o novo valor string do status
-                $domainEvent->status === Status::RESOLVED ? $domainEvent->getOccurredOn() : $currentDto->resolvedAt
+                $resolveAtDate
             ) : null,
             default => $currentDto, // Se o evento não for reconhecido, retorna o DTO atual sem modificação
         };

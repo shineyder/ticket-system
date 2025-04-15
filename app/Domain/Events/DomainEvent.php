@@ -18,4 +18,12 @@ interface DomainEvent
      * Retorna o momento em que o evento ocorreu.
      */
     public function getOccurredOn(): DateTimeImmutable;
+
+    /**
+     * Retorna um array com os dados do evento a serem serializados no payload.
+     * Exclui metadados como aggregateId e occurredOn, que são tratados separadamente.
+     *
+     * @return array<string, mixed>
+     */
+    public function toPayload(): array;
 }
