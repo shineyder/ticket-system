@@ -4,11 +4,10 @@ namespace App\Infrastructure\Messaging\Kafka\Listeners;
 
 use App\Application\Events\DomainEventsPersisted;
 use App\Domain\Events\DomainEvent;
+use DateTime;
 use Junges\Kafka\Facades\Kafka;
 use Illuminate\Support\Facades\Log;
 use Throwable;
-use ReflectionClass;
-use ReflectionProperty;
 
 /**
  * Listener que ouve por DomainEventsPersisted e publica os eventos no Kafka.
@@ -98,28 +97,10 @@ class PublishDomainEventsToKafka
      */
     private function serializeEventPayload(DomainEvent $event): array
     {
-        $payload = [];
-        $reflection = new ReflectionClass($event);
+        $payload = $event->toPayload();
 
-        // Propriedades públicas (incluindo readonly do PHP 8+)
-        foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
-            $propName = $property->getName();
-            // Ignora a propriedade 'occurredOn' se ela for gerenciada separadamente
-            if ($propName === 'occurredOn' && $reflection->hasMethod('getOccurredOn')) {
-                continue;
-            }
-            if ($property->isInitialized($event)) {
-                $value = $property->getValue($event);
-                // Se for um Value Object com método value(), pega o valor primitivo
-                if (is_object($value) && method_exists($value, 'value')) {
-                    $payload[$propName] = $value->value();
-                } else {
-                    $payload[$propName] = $value;
-                }
-            }
-        }
         // Adiciona occurredOn explicitamente no formato ISO8601
-        $payload['occurred_on'] = $event->getOccurredOn()->format(DateTimeImmutable::ISO8601);
+        $payload['occurred_on'] = $event->getOccurredOn()->format(DateTime::ATOM);
 
         return $payload;
     }

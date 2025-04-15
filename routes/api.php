@@ -8,9 +8,9 @@ Route::get('/health', function () {
     return new JsonResponse(['status' => 'ok']);
 });
 
-Route::controller(TicketController::class)->group(function () {
-    Route::post('/ticket', 'store');
-    Route::put('/ticket/{id}', 'resolve');
-    Route::get('/ticket/{id}', 'show');
+Route::controller(TicketController::class)->prefix('/ticket')->group(function () {
+    Route::post('/', 'store');
+    Route::put('/{id}', 'resolve');
+    Route::get('/{id}', 'show');
     Route::get('/', 'all');
 });
