@@ -12,7 +12,7 @@ use App\Domain\ValueObjects\Status;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-class UpdateTicketReadModelProjection
+class UpdateTicketsReadModelProjection
 {
     public function __construct(
         private TicketReadRepositoryInterface $readRepository

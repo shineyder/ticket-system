@@ -1,10 +1,10 @@
 <?php
 
-namespace App\Providers;
+namespace App\Infrastructure\Providers;
 
 use App\Application\Events\DomainEventsPersisted;
 use App\Infrastructure\Messaging\Kafka\Listeners\PublishDomainEventsToKafka;
-use App\Infrastructure\Persistence\MongoDB\Projections\UpdateTicketReadModelProjection;
+use App\Infrastructure\Persistence\MongoDB\Projections\UpdateTicketsReadModelProjection;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 
 class EventServiceProvider extends ServiceProvider
@@ -17,7 +17,7 @@ class EventServiceProvider extends ServiceProvider
     protected $listen = [
         DomainEventsPersisted::class => [
             PublishDomainEventsToKafka::class,
-            UpdateTicketReadModelProjection::class
+            UpdateTicketsReadModelProjection::class
         ],
     ];
 
