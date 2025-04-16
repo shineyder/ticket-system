@@ -12,7 +12,7 @@ class GetAllTicketsQuery
         'status'
     ];
     public function __construct(
-        public readonly string $orderBy = 'created_at',
-        public readonly string $orderDirection = 'desc'
+        public readonly string $orderBy,
+        public readonly string $orderDirection
     ) {}
 }

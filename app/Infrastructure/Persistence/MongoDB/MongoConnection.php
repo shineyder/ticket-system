@@ -2,6 +2,7 @@
 
 namespace App\Infrastructure\Persistence\MongoDB;
 
+use App\Infrastructure\Persistence\Exceptions\MongoConnectionException;
 use MongoDB\Client;
 use MongoDB\Database;
 use RuntimeException;
@@ -24,15 +25,22 @@ class MongoConnection
         $password = env('DB_PASSWORD');
         $options = env('DB_OPTIONS', '');
 
+        $authPart = '';
+        if ($username) {
+            $authPart = rawurlencode($username);
+            if ($password) {
+                $authPart .= ':' . rawurlencode($password);
+            }
+            $authPart .= '@'; // Adiciona o @ no final da autenticação
+        }
+
         // Build the DSN string
         $dsn = sprintf(
-            'mongodb://%s%s%s:%d%s',
-            $username ? rawurlencode($username) : '',
-            $password ? ':' . rawurlencode($password) : '',
-            $username ? '@' : '', // Add '@' only if username is provided
-            $host,
-            $port,
-            $options ? '/?' . $options : ''
+            'mongodb://%s%s:%d%s', // Formato: mongodb://[auth]host:port[/?options]
+            $authPart, // %s -> string de autenticação (pode ser vazia)
+            $host, // %s -> host (string)
+            $port, // %d -> porta (inteiro)
+            $options ? '/?' . $options : '' // %s -> opções (pode ser vazia)
         );
 
         try {
@@ -40,7 +48,7 @@ class MongoConnection
             $this->client = new Client($dsn);
         } catch (\Exception $e) {
             // Handle connection errors appropriately
-            throw new RuntimeException("Could not connect to MongoDB: " . $e->getMessage(), 0, $e);
+            throw new MongoConnectionException($e->getMessage(), 0, $e);
         }
     }
 

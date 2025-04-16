@@ -24,7 +24,7 @@ class TicketController extends Controller
         // Se a validação falhar, o Laravel retorna uma resposta de erro JSON
 
         // Obter apenas os dados validados
-        $validated = $request->validatedData();
+        $validated = $request->validated();
 
         $command = CreateTicketCommand::createWithUuid(
             $validated['title'],
@@ -69,7 +69,7 @@ class TicketController extends Controller
         GetAllTicketsRequest $request
     )
     {
-        $validated = $request->validatedData();
+        $validated = $request->validated();
 
         $query = new GetAllTicketsQuery(
             $validated['orderBy'],

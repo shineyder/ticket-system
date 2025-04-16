@@ -20,6 +20,35 @@ class GetAllTicketsRequest extends FormRequest
     }
 
     /**
+     * Prepare the data for validation.
+     *
+     * Aqui definimos os valores padrão antes da validação ocorrer.
+     *
+     * @return void
+     */
+    protected function prepareForValidation(): void
+    {
+        $defaults = [];
+        
+        // Define 'orderBy' como 'created_at' se não for enviada ou estiver vazia
+        // !filled() para cobrir null, string vazia, etc.
+        if (!$this->filled('orderBy')) {
+            $defaults['orderBy'] = 'created_at';
+        }
+
+        // Define 'orderDirection' como 'desc' se não for enviada ou estiver vazia
+        // !filled() para cobrir null, string vazia, etc.
+        if (!$this->filled('orderDirection')) {
+            $defaults['orderDirection'] = 'desc';
+        }
+
+        // Mescla os valores padrão de volta na requisição se houver algum
+        if (!empty($defaults)) {
+            $this->merge($defaults);
+        }
+    }
+
+    /**
      * Get the validation rules that apply to the request.
      *
      * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
