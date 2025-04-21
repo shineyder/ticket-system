@@ -2,6 +2,7 @@ services:
   app:
     build:
       context: .
+      dockerfile: Dockerfile
       target: dev
     image: ticket-system:dev
     env_file: .env
@@ -30,16 +31,20 @@ services:
 
   mongo:
     image: mongo:7.0
+    container_name: mongo_tickets_dev
     ports:
       - "27017:27017"
     volumes:
       - dev_mongodb_data:/data/db
+      - ./docker/mongo:/docker-entrypoint-initdb.d # Monta o diretório com o script JS
+    command: ["--replSet", "rs0"]
     healthcheck:
-       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
-       interval: 10s
-       timeout: 10s
-       retries: 5
-       start_period: 10s
+        # Tenta verificar se o nó é o primary. Falha se rs.status() não estiver pronto ou não for primary.
+        test: ["CMD", "mongosh", "--eval", "try { rs.status().myState } catch (e) { quit(1) } quit(rs.status().myState == 1 ? 0 : 1)"]
+        interval: 10s
+        timeout: 30s
+        retries: 15
+        start_period: 60s # start_period longo para dar tempo ao script e eleição
 
   kafka:
     image: bitnami/kafka:latest

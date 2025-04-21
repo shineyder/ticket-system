@@ -12,7 +12,7 @@ class TicketCreated implements DomainEvent
         public readonly string $id,
         public readonly string $title,
         public readonly string $description,
-        public readonly string $priority,
+        public readonly int $priority,
         ?DateTimeImmutable $occurredOn = null
     ) {
         // Se $occurredOn for null (novo evento), usa new DateTimeImmutable()

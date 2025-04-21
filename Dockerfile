@@ -32,6 +32,15 @@ WORKDIR /var/www
 COPY --from=builder /app .
 COPY .env .env
 
+# Copia o script de entrypoint para dentro do container
+COPY docker/app/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+# Dá permissão de execução ao script
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Define o script como o ponto de entrada do container
+ENTRYPOINT ["docker-entrypoint.sh"]
+
 EXPOSE 9000
 
 CMD ["php-fpm"]

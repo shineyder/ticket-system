@@ -41,8 +41,11 @@ class Ticket {
     public static function create(string $id, string $title, string $description, string $priority): self {
         $ticket = new self($id); // Cria instância apenas com ID
 
+        $priorityValueObject = Priority::fromString($priority); // Converte string para VO
+        $priorityIntValue = $priorityValueObject->value(); // Pega o valor int
+
         // Cria o evento com os dados iniciais
-        $event = new TicketCreated($id, $title, $description, $priority);
+        $event = new TicketCreated($id, $title, $description, $priorityIntValue);
 
         // Grava e aplica o evento para definir o estado inicial
         $ticket->recordAndApplyEvent($event);
