@@ -75,15 +75,6 @@ return new class extends Migration
             ['key' => ['last_updated_at' => 1], 'name' => 'ticket_read_models_last_updated_at_index'],
         ]);
 
-        // --- Coleções de Filas ---
-        $this->createCollectionAndIndexes('jobs', [
-            ['key' => ['queue' => 1], 'name' => 'jobs_queue_index'],
-        ]);
-
-        $this->createCollectionAndIndexes('job_batches', [
-            // O campo 'id' será o '_id' do MongoDB.
-        ]);
-
         $this->createCollectionAndIndexes('failed_jobs', [
             ['key' => ['uuid' => 1], 'name' => 'failed_jobs_uuid_unique', 'unique' => true],
         ]);
@@ -111,11 +102,6 @@ return new class extends Migration
             'ticket_read_models_created_at_index',
             'ticket_read_models_last_updated_at_index',
         ]);
-
-        // --- Coleções de Filas (Opcional) ---
-        $this->dropIndexes('jobs', ['jobs_queue_index']);
-        // job_batches não tem índices explícitos além do _id
-        $this->dropIndexes('failed_jobs', ['failed_jobs_uuid_unique']);
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Application\UseCases\Queries\GetTicketById;
 
 use App\Application\DTOs\TicketDTO;
+use App\Domain\Exceptions\TicketNotFoundException;
 use App\Domain\Interfaces\Repositories\TicketReadRepositoryInterface;
 
 class GetTicketByIdHandler

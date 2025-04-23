@@ -20,9 +20,6 @@ class MongoTicketReadRepository implements TicketReadRepositoryInterface
         $this->collection = $connection
             ->getDatabase()
             ->selectCollection(self::COLLECTION_NAME);
-
-        // Garantir índice único em ticket_id
-        $this->collection->createIndex(['ticket_id' => 1], ['unique' => true]);
     }
 
     public function save(TicketDTO $ticketDto): void
@@ -51,7 +48,6 @@ class MongoTicketReadRepository implements TicketReadRepositoryInterface
                 ['upsert' => true] // Cria o documento se não existir, atualiza se existir
             );
         } catch (MongoDriverException $e) {
-            // Esse erro é um falso positivo, pode ignorar
             throw new PersistenceOperationFailedException(
                 "Erro ao salvar read model do ticket com ID {$ticketDto->id}: " . $e->getMessage(),
                 $e->getCode(),
@@ -71,7 +67,6 @@ class MongoTicketReadRepository implements TicketReadRepositoryInterface
 
             return $this->mapDocumentToDTO($document);
         } catch (MongoDriverException $e) {
-            // Esse erro é um falso positivo, pode ignorar
             throw new PersistenceOperationFailedException(
                 "Erro ao buscar read model do ticket com ID {$ticketId}: " . $e->getMessage(),
                 $e->getCode(),
@@ -99,7 +94,6 @@ class MongoTicketReadRepository implements TicketReadRepositoryInterface
 
             return $tickets;
         } catch (MongoDriverException $e) {
-            // Esse erro é um falso positivo, pode ignorar
             throw new PersistenceOperationFailedException(
                 "Erro ao buscar todos os read models de tickets: " . $e->getMessage(),
                 $e->getCode(),
@@ -117,11 +111,11 @@ class MongoTicketReadRepository implements TicketReadRepositoryInterface
 
         // Converter BSON UTCDateTime para DateTimeImmutable ou null
         $createdAt = isset($data['created_at']) && $data['created_at'] instanceof UTCDateTime
-            ? $data['created_at']->toDateTime()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            ? $data['created_at']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
             : null;
 
         $resolvedAt = isset($data['resolved_at']) && $data['resolved_at'] instanceof UTCDateTime
-            ? $data['resolved_at']->toDateTime()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            ? $data['resolved_at']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
             : null;
 
         return new TicketDTO(

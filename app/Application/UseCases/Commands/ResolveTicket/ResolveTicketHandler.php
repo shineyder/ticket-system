@@ -2,6 +2,7 @@
 
 namespace App\Application\UseCases\Commands\ResolveTicket;
 
+use App\Application\Events\DomainEventsPersisted;
 use App\Domain\Interfaces\Repositories\TicketEventStoreInterface;
 use Illuminate\Contracts\Events\Dispatcher;
 

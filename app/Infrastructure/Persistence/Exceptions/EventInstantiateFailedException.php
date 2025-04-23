@@ -9,7 +9,10 @@ use Throwable;
  */
 class EventInstantiateFailedException extends \RuntimeException // Usar RuntimeException é comum para erros operacionais/infra
 {
-    public function __construct(string $eventType, ?Throwable $previous = null)
+    public function __construct(
+        string $eventType,
+        ?Throwable $previous = null
+    )
     {
         $message = "Falha ao instanciar evento {$eventType}.";
         // Chama o construtor pai, passando a mensagem, código (0) e a exceção original

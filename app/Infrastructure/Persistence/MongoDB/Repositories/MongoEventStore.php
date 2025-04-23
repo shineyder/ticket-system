@@ -209,6 +209,7 @@ class MongoEventStore implements TicketEventStoreInterface
     {
         $data = (array) $eventData; // Garante que é um array para acesso fácil
         $eventType = $data['event_type'];
+        $aggregateId = $data['aggregate_id'];
 
         if (!class_exists($eventType)) {
             throw new EventClassNotFoundException($eventType);
@@ -220,7 +221,7 @@ class MongoEventStore implements TicketEventStoreInterface
             // Converte para DateTimeImmutable aqui para garantir o tipo correto
             $occurredOn = $this->convertOccurredOnToImmutable($data);
 
-            return $this->instantiateEvent($eventType, $payload, $occurredOn);
+            return $this->instantiateEvent($eventType, $aggregateId, $payload, $occurredOn);
         } catch (\ReflectionException | \TypeError | Exception $e) {
             throw new EventInstantiateFailedException($eventType, $e);
         }
@@ -246,12 +247,18 @@ class MongoEventStore implements TicketEventStoreInterface
      * Instancia um objeto DomainEvent usando seu construtor e os dados fornecidos.
      *
      * @param string $eventType Classe do evento.
+     * @param string $aggregateId O ID do agregado.
      * @param array $payload Dados do payload.
      * @param DateTimeImmutable $occurredOn Momento da ocorrência.
      * @return DomainEvent
      * @throws ReflectionException | TypeError | Exception
      */
-    private function instantiateEvent(string $eventType, array $payload, DateTimeImmutable $occurredOn): DomainEvent
+    private function instantiateEvent(
+        string $eventType,
+        string $aggregateId,
+        array $payload,
+        DateTimeImmutable $occurredOn
+    ): DomainEvent
     {
         $reflectionClass = new \ReflectionClass($eventType);
         $constructor = $reflectionClass->getConstructor();
@@ -262,6 +269,7 @@ class MongoEventStore implements TicketEventStoreInterface
                 // Delega a lógica de resolução do valor para o método auxiliar
                 $args[$param->getName()] = $this->resolveConstructorArgument(
                     $param,
+                    $aggregateId,
                     $payload,
                     $occurredOn
                 );
@@ -277,6 +285,7 @@ class MongoEventStore implements TicketEventStoreInterface
      * Encapsula a lógica de verificar payload, VOs, occurredOn e valores padrão.
      *
      * @param ReflectionParameter $param O parâmetro do construtor sendo resolvido.
+     * @param string $aggregateId O ID do agregado.
      * @param array $payload O payload decodificado do evento.
      * @param DateTimeImmutable $occurredOn O timestamp do evento.
      * @return mixed O valor resolvido para o argumento.
@@ -284,16 +293,23 @@ class MongoEventStore implements TicketEventStoreInterface
      */
     private function resolveConstructorArgument(
         ReflectionParameter $param,
+        string $aggregateId,
         array $payload,
         DateTimeImmutable $occurredOn
     ): mixed {
         $paramName = $param->getName();
         $paramType = $param->getType();
 
+        // --- Lógica específica para parâmetros especiais ---
+        if ($paramName === 'id') {
+            return $aggregateId;
+        }
         if ($paramName === 'occurredOn') {
             return $occurredOn;
         }
+        // --- Fim da lógica específica ---
 
+        $valueFromPayload = null;
         // Verificar se o parâmetro existe no payload
         if (array_key_exists($paramName, $payload)) {
             $valueFromPayload = $payload[$paramName];

@@ -4,12 +4,13 @@ namespace App\Application\Events;
 
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use App\Domain\Events\DomainEvent;
 
 /**
  * Evento de aplicação disparado após eventos de domínio serem persistidos com sucesso.
  */
-class DomainEventsPersisted
+class DomainEventsPersisted implements ShouldQueue
 {
     use Dispatchable, SerializesModels;
 

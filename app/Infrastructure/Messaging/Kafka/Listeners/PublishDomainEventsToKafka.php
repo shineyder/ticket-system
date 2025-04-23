@@ -24,9 +24,14 @@ class PublishDomainEventsToKafka
     {
         // Obtém o nome do tópico do arquivo de configuração (usando o alias 'ticket-events')
         $topic = config('kafka.topics.ticket-events.topic'); // Acessa o tópico pelo alias
+        $broker = config('kafka.topics.ticket-events.broker'); // Acessa o broker pelo alias
 
         if (!$topic) {
             Log::error('Kafka topic alias "ticket-events" não definido ou tópico não configurado.');
+            return;
+        }
+        if (!$broker) {
+            Log::error('Kafka broker alias "ticket-events" não definido ou tópico não configurado.');
             return;
         }
 
@@ -57,10 +62,11 @@ class PublishDomainEventsToKafka
                 $messageKey = $domainEvent->getAggregateId();
 
                 // Publica a mensagem no Kafka
-                Kafka::publishOn($topic)
-                    ->withKey($messageKey)
+                Kafka::publish($broker)
+                    ->onTopic($topic)
                     ->withHeaders($headers)
                     ->withBody($messageBody)
+                    ->withBodyKey('key', $messageKey)
                     ->send();
 
                 Log::debug(

@@ -1,3 +1,4 @@
+#!/bin/sh
 # Sai imediatamente se um comando falhar
 set -e
 
@@ -9,8 +10,6 @@ echo "Running Laravel migrations..."
 php artisan migrate --force
 echo "Migrations finished."
 
-# Agora, executa o comando original que foi passado para o container
-# (que será o CMD do Dockerfile, ou seja, 'php-fpm')
-# O 'exec' substitui o processo do shell pelo php-fpm,
-# o que é importante para o correto tratamento de sinais (como SIGTERM para parar o container).
+# Força o php-fpm a rodar em foreground, ignorando a diretiva 'daemonize' na config
+# Isso garante que o processo principal permaneça ativo para o Docker.
 exec "$@"

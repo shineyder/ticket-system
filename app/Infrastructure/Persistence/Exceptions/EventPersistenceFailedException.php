@@ -9,7 +9,10 @@ use Throwable;
  */
 class EventPersistenceFailedException extends \RuntimeException // Usar RuntimeException é comum para erros operacionais/infra
 {
-    public function __construct(string $aggregateId, ?Throwable $previous = null)
+    public function __construct(
+        string $aggregateId,
+        ?Throwable $previous = null
+    )
     {
         $message = "Falha ao salvar eventos para o agregado {$aggregateId}.";
         // Chama o construtor pai, passando a mensagem, código (0) e a exceção original

@@ -6,13 +6,13 @@ use App\Application\DTOs\TicketDTO;
 use App\Application\Events\DomainEventsPersisted;
 use App\Domain\Events\TicketCreated;
 use App\Domain\Events\TicketResolved;
-use App\Domain\Events\TicketStatusChanged;
 use App\Domain\Interfaces\Repositories\TicketReadRepositoryInterface;
 use App\Domain\ValueObjects\Status;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Throwable;
 
-class UpdateTicketsReadModelProjection
+class UpdateTicketsReadModelProjection implements ShouldQueue
 {
     public function __construct(
         private TicketReadRepositoryInterface $readRepository
@@ -26,7 +26,6 @@ class UpdateTicketsReadModelProjection
      */
     public function handle(DomainEventsPersisted $eventWrapper): void
     {
-        // Processa apenas eventos do agregado 'Ticket'
         if ($eventWrapper->aggregateType !== 'Ticket') {
             return;
         }
@@ -44,7 +43,6 @@ class UpdateTicketsReadModelProjection
                 // Salva o DTO atualizado (ou cria se for novo)
                 if ($updatedDto) {
                     $this->readRepository->save($updatedDto);
-                    Log::debug('Read model atualizado', ['ticket_id' => $aggregateId, 'event' => get_class($domainEvent)]);
                 }
 
             } catch (Throwable $e) {
@@ -70,20 +68,12 @@ class UpdateTicketsReadModelProjection
      */
     private function applyEventToDTO(mixed $domainEvent, ?TicketDTO $currentDto): ?TicketDTO
     {
-        if(get_class($domainEvent) === TicketStatusChanged::class){
-            if($domainEvent->status === Status::RESOLVED){
-                $resolveAtDate = $domainEvent->getOccurredOn();
-            }else{
-                $resolveAtDate = $currentDto->resolvedAt;
-            }
-        }
-        
         return match (get_class($domainEvent)) {
             TicketCreated::class => new TicketDTO(
-                id: $domainEvent->aggregateId,
+                id: $domainEvent->getAggregateId(),
                 title: $domainEvent->title,
                 description: $domainEvent->description,
-                priority: $domainEvent->priority, // Assume que o evento tem o valor string/int
+                priority: $domainEvent->priority,
                 status: Status::OPEN, // Status inicial padrão
                 createdAt: $domainEvent->getOccurredOn(),
                 resolvedAt: null
@@ -92,10 +82,6 @@ class UpdateTicketsReadModelProjection
                 Status::RESOLVED,
                 $domainEvent->getOccurredOn() // Passa a data de resolução
             ) : null, // Não faz sentido resolver um ticket que não foi criado
-            TicketStatusChanged::class => $currentDto ? $currentDto->withStatus(
-                $domainEvent->status, // Assume que o evento tem o novo valor string do status
-                $resolveAtDate
-            ) : null,
             default => $currentDto, // Se o evento não for reconhecido, retorna o DTO atual sem modificação
         };
     }

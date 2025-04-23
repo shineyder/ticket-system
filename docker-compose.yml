@@ -19,6 +19,10 @@ services:
        interval: 10s
        timeout: 5s
        retries: 3
+    entrypoint: ["docker-entrypoint.sh"]
+    command: php-fpm -F
+    environment:
+      REDIS_CLIENT: predis
   nginx:
     image: nginx:latest
     ports:
@@ -36,7 +40,6 @@ services:
       - "27017:27017"
     volumes:
       - dev_mongodb_data:/data/db
-      - ./docker/mongo:/docker-entrypoint-initdb.d # Monta o diretório com o script JS
     command: ["--replSet", "rs0"]
     healthcheck:
         # Tenta verificar se o nó é o primary. Falha se rs.status() não estiver pronto ou não for primary.
@@ -45,6 +48,24 @@ services:
         timeout: 30s
         retries: 15
         start_period: 60s # start_period longo para dar tempo ao script e eleição
+
+  mongo-init-replica:
+    image: mongo:7.0 # Usa a mesma imagem para ter o mongosh
+    depends_on:
+      mongo:
+        condition: service_started # Healthcheck do mongo já verifica myState=1, service_started é suficiente aqui.
+    restart: 'no' # Só precisa rodar uma vez
+    volumes:
+      # Monta o script local no container em modo leitura
+      - ./docker/mongo/init-replica-set-from-container.js:/scripts/init.js:ro
+    # Comando agora executa o mongosh passando o arquivo de script montado
+    command: >
+      sh -c "
+        echo 'MONGO-INIT-WRAPPER: Waiting 5 seconds for mongo service to be ready...';
+        sleep 5;
+        echo 'MONGO-INIT-WRAPPER: Attempting to run init script...';
+        mongosh --host mongo:27017 /scripts/init.js
+      "
 
   kafka:
     image: bitnami/kafka:latest
@@ -78,10 +99,47 @@ services:
     healthcheck: # Verifica se Kafka está pronto
         test: ["CMD", "kafka-topics.sh", "--list", "--bootstrap-server", "localhost:9092"]
         interval: 15s
-        timeout: 10s
+        timeout: 20s
         retries: 10
         start_period: 20s
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  worker:
+    image: ticket-system:dev # Mesma imagem que o serviço 'app'
+    env_file: .env          # Compartilha as mesmas variáveis de ambiente
+    volumes:
+      - .:/var/www          # Monta o código fonte igual ao 'app'
+      - /var/www/vendor
+    working_dir: /var/www   # Garante que o artisan rode no diretório corretoker
+    restart: unless-stopped # Reinicia o worker se ele parar inesperadamente
+    depends_on:
+      app:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    entrypoint: ["docker-entrypoint.sh"] # Executa o mesmo script de setup inicial que o 'app'
+    command: >
+          sh -c "
+            echo 'WORKER_SCRIPT: Entrypoint finished. Starting sleep...';
+            sleep 30;
+            echo 'WORKER_SCRIPT: Sleep finished. Attempting to execute queue:work...';
+            php artisan queue:work redis --verbose --tries=3 --timeout=90 >> /proc/1/fd/1 2>&1;
+            echo 'WORKER_SCRIPT: queue:work command finished (or failed silently). Exit code: $$?';
+          " # Comando específico do worker
 
 volumes:
   dev_mongodb_data:
   kafka_data: # Adicionar volume para Kafka
+  redis_data: # Adicionar volume para Redis

@@ -9,7 +9,11 @@ use Throwable;
  */
 class EventLoadFailedException extends \RuntimeException // Usar RuntimeException é comum para erros operacionais/infra
 {
-    public function __construct(string $aggregateId, string $errorMessage, ?Throwable $previous = null)
+    public function __construct(
+        string $aggregateId,
+        string $errorMessage,
+        ?Throwable $previous = null
+    )
     {
         $message = "Falha ao carregar agregado {$aggregateId}: ". $errorMessage;
         // Chama o construtor pai, passando a mensagem, código (0) e a exceção original

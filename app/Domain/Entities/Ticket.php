@@ -6,7 +6,6 @@ use App\Domain\Events\DomainEvent;
 use App\Domain\ValueObjects\Status;
 use App\Domain\Events\TicketCreated;
 use App\Domain\Events\TicketResolved;
-use App\Domain\Events\TicketStatusChanged;
 use App\Domain\Exceptions\InvalidTicketStateException;
 use App\Domain\ValueObjects\Priority;
 use DateTimeImmutable;
@@ -108,15 +107,6 @@ class Ticket {
         $this->status = new Status(Status::RESOLVED);
         $this->resolvedAt = $event->getOccurredOn();
     }
-
-    /**
-     * Aplica a mudança de estado quando um TicketStatusChanged ocorre.
-     * @internal Este método é chamado dinamicamente pelo método apply() via getApplyMethodName().
-     */
-    private function applyTicketStatusChanged(TicketStatusChanged $event): void {// NOSONAR
-        $this->status = new Status($event->status);
-    }
-
     // --- Métodos Auxiliares e de Infraestrutura ES ---
 
     /**
