@@ -88,16 +88,19 @@ This section provides instructions on how to set up and run the Ticket-System pr
 
     **Copy the Example File:**
         Create your own environment file by copying the example:
-        ```bash
-        cp .env.example .env
-        ```
+   
+    ```bash
+    cp .env.example .env
+    ```
 
     **Generate Application Key:**
         Laravel requires an application key for security. Generate one using Artisan:
-        ```bash
-        docker compose exec app php artisan key:generate
-        ```
-        *(If the containers are not running yet, you might need to run `docker compose run --rm app php artisan key:generate` first, copy the key, then run `docker compose up -d --build`)*
+   
+    ```bash
+    docker compose exec app php artisan key:generate
+    ```
+   
+    *(If the containers are not running yet, you might need to run `docker compose run --rm app php artisan key:generate` first, copy the key, then run `docker compose up -d --build`)*
 
     **Review `.env` Settings:**
         The default values in `.env.example` are configured for the Docker development environment provided in `docker-compose.yml`. Hostnames like `mongo`, `redis`, and `kafka` refer to the service names within the Docker network.
@@ -107,7 +110,7 @@ This section provides instructions on how to set up and run the Ticket-System pr
 
     **Important:** Never commit your actual `.env` file to version control. The `.env.example` file serves as a template.
 
-4. **Build and Run Docker Containers:**
+5. **Build and Run Docker Containers:**
 
     ```bash
     docker compose up -d --build
@@ -119,7 +122,7 @@ This section provides instructions on how to set up and run the Ticket-System pr
     * **Note:** The default configuration (.env) uses QUEUE_CONNECTION=redis for background jobs. The dedicated worker service automatically starts the queue processor (php artisan queue:work), ensuring background jobs are handled without manual intervention.
     * **Note:** The `app` and `worker` container's entrypoint script automatically runs database migrations (`php artisan migrate --force`) upon starting, so manual migration is typically not needed after the initial setup.
 
-5. **Accessing the Application:**
+6. **Accessing the Application:**
 
 The application API endpoints are available under the base URL `http://localhost/api`.
 
