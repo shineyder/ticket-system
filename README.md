@@ -110,7 +110,7 @@ This section provides instructions on how to set up and run the Ticket-System pr
 
     **Important:** Never commit your actual `.env` file to version control. The `.env.example` file serves as a template.
 
-5. **Build and Run Docker Containers:**
+4. **Build and Run Docker Containers:**
 
     ```bash
     docker compose up -d --build
@@ -122,11 +122,11 @@ This section provides instructions on how to set up and run the Ticket-System pr
     * **Note:** The default configuration (.env) uses QUEUE_CONNECTION=redis for background jobs. The dedicated worker service automatically starts the queue processor (php artisan queue:work), ensuring background jobs are handled without manual intervention.
     * **Note:** The `app` and `worker` container's entrypoint script automatically runs database migrations (`php artisan migrate --force`) upon starting, so manual migration is typically not needed after the initial setup.
 
-6. **Accessing the Application:**
+5. **Accessing the Application:**
 
-The application API endpoints are available under the base URL `http://localhost/api`.
+    The application API endpoints are available under the base URL `http://localhost/api`.
 
-You can interact with the API using tools like Postman, Insomnia, or cURL. For example, to create a ticket, you would send a POST request to `http://localhost/api/tickets`.
+    You can interact with the API using tools like Postman, Insomnia, or cURL. For example, to create a ticket, you would send a POST request to `http://localhost/api/tickets`.
 
 ### Running Commands
 
