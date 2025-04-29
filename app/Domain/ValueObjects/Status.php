@@ -5,12 +5,11 @@ namespace App\Domain\ValueObjects;
 class Status {
     public const OPEN = 'open';
     public const RESOLVED = 'resolved';
-    public const CLOSED = 'closed';
 
     private string $value;
 
     public function __construct(string $value) {
-        if (!in_array($value, [self::OPEN, self::RESOLVED, self::CLOSED])) {
+        if (!in_array($value, [self::OPEN, self::RESOLVED])) {
             throw new \InvalidArgumentException("Status inválido: " . $value);
         }
         $this->value = $value;
@@ -28,6 +27,6 @@ class Status {
 
     public static function getAllowedValues(): array
     {
-        return [self::OPEN, self::RESOLVED, self::CLOSED];
+        return [self::OPEN, self::RESOLVED];
     }
 }

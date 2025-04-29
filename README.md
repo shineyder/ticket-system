@@ -88,18 +88,18 @@ This section provides instructions on how to set up and run the Ticket-System pr
 
     **Copy the Example File:**
         Create your own environment file by copying the example:
-   
+
     ```bash
     cp .env.example .env
     ```
 
     **Generate Application Key:**
         Laravel requires an application key for security. Generate one using Artisan:
-   
+
     ```bash
     docker compose exec app php artisan key:generate
     ```
-   
+
     *(If the containers are not running yet, you might need to run `docker compose run --rm app php artisan key:generate` first, copy the key, then run `docker compose up -d --build`)*
 
     **Review `.env` Settings:**

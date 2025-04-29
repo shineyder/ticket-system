@@ -45,4 +45,18 @@ class Priority {
         // Retorna as chaves do array usado em fromString
         return ['low', 'medium', 'high'];
     }
+
+    /**
+     * Retorna a representação em string da prioridade.
+     *
+     * @return string
+     */
+    public function toString(): string
+    {
+        return match ($this->value) {
+            self::LOW => 'low',
+            self::MEDIUM => 'medium',
+            self::HIGH => 'high',
+        };
+    }
 }

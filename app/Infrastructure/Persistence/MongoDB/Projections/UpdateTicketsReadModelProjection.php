@@ -7,6 +7,7 @@ use App\Application\Events\DomainEventsPersisted;
 use App\Domain\Events\TicketCreated;
 use App\Domain\Events\TicketResolved;
 use App\Domain\Interfaces\Repositories\TicketReadRepositoryInterface;
+use App\Domain\ValueObjects\Priority;
 use App\Domain\ValueObjects\Status;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -73,7 +74,7 @@ class UpdateTicketsReadModelProjection implements ShouldQueue
                 id: $domainEvent->getAggregateId(),
                 title: $domainEvent->title,
                 description: $domainEvent->description,
-                priority: $domainEvent->priority,
+                priority: (new Priority($domainEvent->priority))->toString(),
                 status: Status::OPEN, // Status inicial padrão
                 createdAt: $domainEvent->getOccurredOn(),
                 resolvedAt: null
