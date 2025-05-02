@@ -11,7 +11,7 @@ use DateTimeImmutable;
 
 class TicketApiTest extends TestCase
 {
-    const BASEURL = '/api/ticket';
+    private const BASEURL = '/api/ticket';
 
     use DatabaseMigrations; // Garante DB limpo (tickets_test) e migrations rodadas
 
@@ -28,6 +28,15 @@ class TicketApiTest extends TestCase
         // Resolve a implementação real do repositório de leitura
         $repo = $this->app->make(TicketReadRepositoryInterface::class);
         return $repo->findById($ticketId);
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // --- Configuração para usar Redis neste teste ---
+        config(['cache.default' => 'redis']);
+        $this->app['cache']->store('redis')->flush();
     }
 
     // ========================================
@@ -183,14 +192,15 @@ class TicketApiTest extends TestCase
     public function resolve_ticket_fails_for_already_resolved_ticket(): void
     {
         // Arrange: Cria e resolve um ticket
-        $ticketId = $this->createTicketViaApi(['title' => 'Already Resolved']);
+        $ticketId = $this->createTicketViaApi([
+            'title' => 'Already Resolved',
+            'description' => 'This ticket is already resolved.',
+            'priority' => 'low'
+        ]);
         $this->putJson("/api/ticket/{$ticketId}")->assertStatus(200); // Resolve a primeira vez
 
-        // Act: Tenta resolver novamente
-        $response = $this->putJson("/api/ticket/{$ticketId}");
-
-        // Assert: Espera erro (409 Conflict)
-        $response->assertStatus(409);
+        // Act: Tenta resolver novamente, espera erro (409 Conflict)
+        $this->putJson("/api/ticket/{$ticketId}")->assertStatus(409);
     }
 
     // ========================================
@@ -200,8 +210,6 @@ class TicketApiTest extends TestCase
     /** @test */
     public function it_can_get_an_existing_ticket_by_id(): void
     {
-        // Arrange: Cria um ticket
-        $createdAt = new DateTimeImmutable('-1 hour'); // Para ter um valor conhecido
         $ticketId = $this->createTicketViaApi([
             'title' => 'Find Me By ID',
             'description' => 'Specific description.',
@@ -210,24 +218,22 @@ class TicketApiTest extends TestCase
 
         $readRepo = $this->app->make(TicketReadRepositoryInterface::class);
         $dto = $readRepo->findById($ticketId);
-        $dtoWithForcedDate = new TicketDTO(
-            $dto->id, $dto->title, $dto->description, $dto->priority, $dto->status, $createdAt, $dto->resolvedAt
-        );
-        $readRepo->save($dtoWithForcedDate);
+        $this->assertNotNull($dto, "DTO não encontrado no read model após criação.");
+        $this->assertNotNull($dto->createdAt, "DTO->createdAt não deveria ser nulo.");
+        $expectedCreatedAtString = $dto->createdAt->format(DateTimeImmutable::ATOM); // Pega a data real do DTO
 
         // Act
         $response = $this->getJson("/api/ticket/{$ticketId}");
 
         // Assert
-        $response
-            ->assertStatus(200)
+        $response->assertStatus(200)
             ->assertJson([ // Verifica a estrutura e valores exatos
                 'id' => $ticketId,
                 'title' => 'Find Me By ID',
                 'description' => 'Specific description.',
                 'priority' => 'low',
                 'status' => Status::OPEN,
-                'createdAt' => $createdAt->format(DateTimeImmutable::ATOM), // Compara formato ISO8601
+                'createdAt' => $expectedCreatedAtString,
                 'resolvedAt' => null,
             ]);
     }

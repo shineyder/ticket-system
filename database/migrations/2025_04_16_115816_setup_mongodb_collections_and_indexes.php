@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\App;
 use MongoDB\Driver\Exception\CommandException; // Para capturar erros específicos do MongoDB
 
 return new class extends Migration
@@ -113,17 +114,22 @@ return new class extends Migration
     private function createCollectionAndIndexes(string $collectionName, array $indexes): void
     {
         $db = DB::connection($this->connection)->getDatabase();
+        $isTesting = config('app.env') !== 'testing';
 
         // Tenta criar a coleção explicitamente (ignora erro se já existir)
         try {
             $db->createCollection($collectionName);
-            echo "Coleção '$collectionName' criada ou já existente.\n";
+            if ($isTesting) {
+                echo "Coleção '$collectionName' criada ou já existente.\n";
+            }
         } catch (CommandException $e) {
             // Código 48: NamespaceExists (coleção já existe) - Ignorar este erro específico
             if ($e->getCode() !== 48) {
                 throw $e; // Relança outros erros
             }
-            echo "Coleção '$collectionName' já existente.\n";
+            if ($isTesting) {
+                echo "Coleção '$collectionName' já existente.\n";
+            }
         }
 
         $collection = $db->selectCollection($collectionName);
@@ -132,10 +138,14 @@ return new class extends Migration
         if (!empty($indexes)) {
             try {
                 $collection->createIndexes($indexes);
-                echo "Índices para '$collectionName' criados com sucesso.\n";
+                if ($isTesting) {
+                    echo "Índices para '$collectionName' criados com sucesso.\n";
+                }
             } catch (CommandException $e) {
                 // Tratar erros de criação de índice se necessário, mas geralmente relançar
-                echo "Erro ao criar índices para '$collectionName': " . $e->getMessage() . "\n";
+                if ($isTesting) {
+                    echo "Erro ao criar índices para '$collectionName': " . $e->getMessage() . "\n";
+                }
                 // throw $e; // Descomentar para parar a migração em caso de erro de índice
             }
         }
@@ -150,21 +160,28 @@ return new class extends Migration
     private function dropIndexes(string $collectionName, array $indexNames): void
     {
         $collection = DB::connection($this->connection)->getCollection($collectionName);
+        $isTesting = config('app.env') !== 'testing';
 
         foreach ($indexNames as $indexName) {
             try {
                 $collection->dropIndex($indexName);
-                echo "Índice '$indexName' removido da coleção '$collectionName'.\n";
+                if ($isTesting) {
+                    echo "Índice '$indexName' removido da coleção '$collectionName'.\n";
+                }
             } catch (CommandException $e) {
                 // Código 27: IndexNotFound - Ignorar se o índice não existir
-                if ($e->getCode() === 27) {
-                    echo "Índice '$indexName' não encontrado na coleção '$collectionName' (ignorado).\n";
-                } else {
-                    echo "Erro ao remover índice '$indexName' da coleção '$collectionName': " . $e->getMessage() . "\n";
-                    // throw $e; // Descomentar para parar a migração em caso de erro
+                if ($isTesting) {
+                    if ($e->getCode() === 27) {
+                        echo "Índice '$indexName' não encontrado na coleção '$collectionName' (ignorado).\n";
+                    } else {
+                        echo "Erro ao remover índice '$indexName' da coleção '$collectionName': " . $e->getMessage() . "\n";
+                        // throw $e; // Descomentar para parar a migração em caso de erro
+                    }
                 }
             } catch (\Exception $e) {
-                echo "Erro inesperado ao remover índice '$indexName' da coleção '$collectionName': " . $e->getMessage() . "\n";
+                if ($isTesting) {
+                    echo "Erro inesperado ao remover índice '$indexName' da coleção '$collectionName': " . $e->getMessage() . "\n";
+                }
                 // throw $e; // Descomentar para parar a migração em caso de erro
             }
         }

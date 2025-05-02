@@ -3,26 +3,31 @@
 namespace Tests\Integration\Infrastructure\Persistence\MongoDB\Repositories;
 
 use App\Application\DTOs\TicketDTO;
-use App\Domain\Interfaces\Repositories\TicketReadRepositoryInterface;
 use App\Infrastructure\Persistence\MongoDB\Repositories\MongoTicketReadRepository;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
-use Illuminate\Support\Facades\DB;
+use App\Infrastructure\Persistence\MongoDB\MongoConnection;
 use MongoDB\BSON\UTCDateTime;
 use Tests\TestCase;
 use DateTimeImmutable;
 
 class MongoTicketReadRepositoryIntegrationTest extends TestCase
 {
+    private const DATEFORMAT = 'Y-m-d\TH:i:s.v';
     use DatabaseMigrations; // Garante DB limpo e migrations rodadas a cada teste
 
-    private TicketReadRepositoryInterface $readRepository;
+    private MongoTicketReadRepository $readRepository;
     private string $collectionName = 'ticket_read_models'; // Nome da coleção
+    private MongoConnection $mongoConnection;
 
     protected function setUp(): void
     {
         parent::setUp();
+
         // Resolve a implementação real do container do Laravel
-        $this->readRepository = $this->app->make(TicketReadRepositoryInterface::class);
+        $this->readRepository = $this->app->make(MongoTicketReadRepository::class);
+
+        $this->mongoConnection = $this->app->make(MongoConnection::class);
+
         $this->assertInstanceOf(MongoTicketReadRepository::class, $this->readRepository);
     }
 
@@ -31,10 +36,9 @@ class MongoTicketReadRepositoryIntegrationTest extends TestCase
      */
     private function findReadModelInDb(string $ticketId): ?array
     {
-        $document = DB::connection('mongodb')
-            ->collection($this->collectionName)
-            ->where('ticket_id', $ticketId)
-            ->first();
+        $document = $this->mongoConnection->getDatabase()
+            ->selectCollection($this->collectionName)
+            ->findOne(['ticket_id' => $ticketId]);
 
         return $document ? (array) $document : null;
     }
@@ -68,7 +72,12 @@ class MongoTicketReadRepositoryIntegrationTest extends TestCase
         $this->assertSame('high', $dbData['priority']);
         $this->assertSame('open', $dbData['status']);
         $this->assertInstanceOf(UTCDateTime::class, $dbData['created_at']);
-        $this->assertEquals($now, $dbData['created_at']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get())));
+        $this->assertEquals(
+            $now->format(self::DATEFORMAT),
+            $dbData['created_at']->toDateTimeImmutable()
+                ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                ->format(self::DATEFORMAT)
+        );
         $this->assertNull($dbData['resolved_at']);
         $this->assertInstanceOf(UTCDateTime::class, $dbData['last_updated_at']);
     }
@@ -113,15 +122,19 @@ class MongoTicketReadRepositoryIntegrationTest extends TestCase
         // Verifica se createdAt NÃO foi alterado ($setOnInsert funcionou)
         $this->assertInstanceOf(UTCDateTime::class, $dbDataUpdated['created_at']);
         $this->assertEquals(
-            $initialTime, // Deve ser igual ao tempo inicial
-            $dbDataUpdated['created_at']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            $initialTime->format(self::DATEFORMAT), // Deve ser igual ao tempo inicial
+            $dbDataUpdated['created_at']->toDateTimeImmutable()
+                ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                ->format(self::DATEFORMAT)
         );
 
         // Verifica resolvedAt
         $this->assertInstanceOf(UTCDateTime::class, $dbDataUpdated['resolved_at']);
         $this->assertEquals(
-            $resolvedTime,
-            $dbDataUpdated['resolved_at']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            $resolvedTime->format(self::DATEFORMAT),
+            $dbDataUpdated['resolved_at']->toDateTimeImmutable()
+                ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                ->format(self::DATEFORMAT)
         );
 
         // Verifica se last_updated_at foi atualizado
@@ -148,7 +161,7 @@ class MongoTicketReadRepositoryIntegrationTest extends TestCase
         $this->assertSame('Desc find', $foundDto->description);
         $this->assertSame('low', $foundDto->priority);
         $this->assertSame('open', $foundDto->status);
-        $this->assertEquals($now, $foundDto->createdAt); // Compara DateTimeImmutable
+        $this->assertEquals($now->format(self::DATEFORMAT), $foundDto->createdAt->format(self::DATEFORMAT));
         $this->assertNull($foundDto->resolvedAt);
     }
 

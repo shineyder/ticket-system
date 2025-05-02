@@ -44,16 +44,16 @@ The project is organized into the following main directories:
 
 ## Testing
 
-A comprehensive testing strategy is planned to ensure code quality, reliability, and maintainability. The following types of tests will be implemented:
+A comprehensive testing strategy **has been implemented** to ensure code quality, reliability, and maintainability. The following types of tests are included:
 
-* **Unit Tests:** Focusing on isolated components within the Domain (Entities, Value Objects, Domain Events) and Application (Use Cases/Handlers) layers.
-* **Integration Tests:** Verifying the interaction between different components, particularly between the Application layer and Infrastructure implementations (e.g., testing Use Case interaction with the Event Store or Kafka publishers).
-* **Feature Tests:** Testing the application from the outside in, typically by making HTTP requests to the API endpoints and asserting the responses.
+* **Unit Tests:** Focusing on isolated components within the Domain (Entities, Value Objects, Domain Events) and Application (Use Cases/Handlers) layers, as well as specific Infrastructure components like the Cache Decorator.
+* **Integration Tests:** Verifying the interaction between different components, particularly between the Application layer and Infrastructure implementations (e.g., testing Use Case interaction with the Event Store, Cache Decorator interaction with Redis, or Kafka publishers).
+* **Feature Tests:** Testing the application from the outside in, typically by making HTTP requests to the API endpoints and asserting the responses, ensuring the entire flow works as expected from a user's perspective.
 
-To run the test suite (once implemented), use the following Docker command:
+To run the **complete test suite**, use the following Docker command:
 
 ```bash
-docker compose exec app php artisan test
+docker compose exec app run-tests.sh
 ```
 
 ## Getting Started

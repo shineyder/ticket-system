@@ -9,24 +9,29 @@ use App\Domain\Exceptions\AggregateNotFoundException;
 use App\Domain\Interfaces\Repositories\TicketEventStoreInterface;
 use App\Domain\ValueObjects\Priority;
 use App\Domain\ValueObjects\Status;
+use App\Infrastructure\Persistence\MongoDB\MongoConnection;
 use App\Infrastructure\Persistence\MongoDB\Repositories\MongoEventStore;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
-use Illuminate\Support\Facades\DB;
 use MongoDB\BSON\UTCDateTime;
 use Tests\TestCase;
 
 class MongoEventStoreIntegrationTest extends TestCase
 {
+    private const DATEFORMAT = 'Y-m-d\TH:i:s.v';
     use DatabaseMigrations; // Garante DB limpo e migrations rodadas a cada teste
 
     private TicketEventStoreInterface $eventStore;
     private string $collectionName = 'ticket_events'; // Nome da coleção
+    private MongoConnection $mongoConnection;
 
     protected function setUp(): void
     {
         parent::setUp();
         // Resolve a implementação real do container do Laravel
         $this->eventStore = $this->app->make(TicketEventStoreInterface::class);
+
+        $this->mongoConnection = $this->app->make(MongoConnection::class);
+
         $this->assertInstanceOf(MongoEventStore::class, $this->eventStore);
     }
 
@@ -35,12 +40,13 @@ class MongoEventStoreIntegrationTest extends TestCase
      */
     private function findEventsInDb(string $aggregateId): array
     {
-        return DB::connection('mongodb')
-            ->collection($this->collectionName)
-            ->where('aggregate_id', $aggregateId)
-            ->orderBy('sequence_number', 'asc')
-            ->get()
-            ->toArray();
+        $cursor = $this->mongoConnection->getDatabase()
+            ->selectCollection($this->collectionName)
+            ->find(
+                ['aggregate_id' => $aggregateId],
+                ['sort' => ['sequence_number' => 1]]
+            );
+        return $cursor->toArray();
     }
 
     /** @test */
@@ -73,8 +79,10 @@ class MongoEventStoreIntegrationTest extends TestCase
         $this->assertInstanceOf(UTCDateTime::class, $dbEventData['occurred_on']);
         // Compara timestamps convertendo BSON para DateTimeImmutable
         $this->assertEquals(
-            $creationTime,
-            $dbEventData['occurred_on']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            $creationTime->format(self::DATEFORMAT),
+            $dbEventData['occurred_on']->toDateTimeImmutable()
+                ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                ->format(self::DATEFORMAT)
         );
 
         $payload = json_decode($dbEventData['payload'], true);
@@ -92,7 +100,10 @@ class MongoEventStoreIntegrationTest extends TestCase
         $this->assertSame($description, $loadedTicket->getDescription());
         $this->assertTrue($loadedTicket->getPriority()->equals(new Priority($priorityInt)));
         $this->assertTrue($loadedTicket->getStatus()->equals(new Status(Status::OPEN)));
-        $this->assertEquals($creationTime, $loadedTicket->getCreatedAt());
+        $this->assertEquals(
+            $creationTime->format(self::DATEFORMAT),
+            $loadedTicket->getCreatedAt()->format(self::DATEFORMAT)
+        );
         $this->assertNull($loadedTicket->getResolvedAt());
         $this->assertEmpty($loadedTicket->pullUncommittedEvents()); // Não deve ter eventos após carregar
     }
@@ -125,8 +136,10 @@ class MongoEventStoreIntegrationTest extends TestCase
         $this->assertSame(1, $dbEvent1Data['sequence_number']);
         $this->assertSame(TicketCreated::class, $dbEvent1Data['event_type']);
         $this->assertEquals(
-            $creationTime,
-            $dbEvent1Data['occurred_on']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            $creationTime->format(self::DATEFORMAT),
+            $dbEvent1Data['occurred_on']->toDateTimeImmutable()
+                ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                ->format(self::DATEFORMAT)
         );
 
         // Verifica evento 2 (Resolved)
@@ -134,8 +147,10 @@ class MongoEventStoreIntegrationTest extends TestCase
         $this->assertSame(2, $dbEvent2Data['sequence_number']);
         $this->assertSame(TicketResolved::class, $dbEvent2Data['event_type']);
         $this->assertEquals(
-            $resolveTime,
-            $dbEvent2Data['occurred_on']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            $resolveTime->format(self::DATEFORMAT),
+            $dbEvent2Data['occurred_on']->toDateTimeImmutable()
+                ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                ->format(self::DATEFORMAT)
         );
         $this->assertSame('[]', $dbEvent2Data['payload']); // Payload vazio para TicketResolved
 
@@ -146,8 +161,14 @@ class MongoEventStoreIntegrationTest extends TestCase
         $this->assertInstanceOf(Ticket::class, $loadedTicket);
         $this->assertSame($ticketId, $loadedTicket->getId());
         $this->assertTrue($loadedTicket->getStatus()->equals(new Status(Status::RESOLVED)));
-        $this->assertEquals($creationTime, $loadedTicket->getCreatedAt());
-        $this->assertEquals($resolveTime, $loadedTicket->getResolvedAt());
+        $this->assertEquals(
+            $creationTime->format(self::DATEFORMAT),
+            $loadedTicket->getCreatedAt()->format(self::DATEFORMAT)
+        );
+        $this->assertEquals(
+            $resolveTime->format(self::DATEFORMAT),
+            $loadedTicket->getResolvedAt()->format(self::DATEFORMAT)
+        );
         $this->assertEmpty($loadedTicket->pullUncommittedEvents());
     }
 
@@ -181,8 +202,10 @@ class MongoEventStoreIntegrationTest extends TestCase
         $this->assertSame(2, ((array)$dbEvents[1])['sequence_number']);
         $this->assertSame(TicketResolved::class, ((array)$dbEvents[1])['event_type']);
         $this->assertEquals(
-            $resolveTime,
-            ((array)$dbEvents[1])['occurred_on']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            $resolveTime->format(self::DATEFORMAT),
+            ((array)$dbEvents[1])['occurred_on']->toDateTimeImmutable()
+                ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                ->format(self::DATEFORMAT)
         );
 
         // Act: Load again
@@ -190,8 +213,14 @@ class MongoEventStoreIntegrationTest extends TestCase
 
         // Assert: Load (estado final)
         $this->assertTrue($reloadedTicket->getStatus()->equals(new Status(Status::RESOLVED)));
-        $this->assertEquals($creationTime, $reloadedTicket->getCreatedAt());
-        $this->assertEquals($resolveTime, $reloadedTicket->getResolvedAt());
+        $this->assertEquals(
+            $creationTime->format(self::DATEFORMAT),
+            $reloadedTicket->getCreatedAt()->format(self::DATEFORMAT)
+        );
+        $this->assertEquals(
+            $resolveTime->format(self::DATEFORMAT),
+            $reloadedTicket->getResolvedAt()->format(self::DATEFORMAT)
+        );
     }
 
     /** @test */

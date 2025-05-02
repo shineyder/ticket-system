@@ -9,14 +9,17 @@ use App\Domain\Events\TicketResolved;
 use App\Domain\Interfaces\Repositories\TicketReadRepositoryInterface;
 use App\Domain\ValueObjects\Priority;
 use App\Domain\ValueObjects\Status;
+use Illuminate\Cache\CacheManager;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Throwable;
 
 class UpdateTicketsReadModelProjection implements ShouldQueue
 {
+    private const CACHE_TAG_TO_INVALIDATE = 'tickets-list';
     public function __construct(
-        private TicketReadRepositoryInterface $readRepository
+        private TicketReadRepositoryInterface $readRepository,
+        private readonly CacheManager $cache
     ) {}
 
     /**
@@ -32,6 +35,7 @@ class UpdateTicketsReadModelProjection implements ShouldQueue
         }
 
         $aggregateId = $eventWrapper->aggregateId;
+        $cacheNeedsInvalidation = false;
 
         foreach ($eventWrapper->domainEvents as $domainEvent) {
             try {
@@ -44,6 +48,7 @@ class UpdateTicketsReadModelProjection implements ShouldQueue
                 // Salva o DTO atualizado (ou cria se for novo)
                 if ($updatedDto) {
                     $this->readRepository->save($updatedDto);
+                    $cacheNeedsInvalidation = true;
                 }
 
             } catch (Throwable $e) {
@@ -56,6 +61,19 @@ class UpdateTicketsReadModelProjection implements ShouldQueue
                         'trace' => $e->getTraceAsString() // Remover para produção, muito verboso
                     ]
                 );
+            }
+        }
+
+        if ($cacheNeedsInvalidation) {
+            try {
+                // Remove todas as entradas de cache associadas à tag 'tickets-list'
+                $this->cache->tags(self::CACHE_TAG_TO_INVALIDATE)->flush();
+                Log::debug('Cache de listagem de tickets invalidado.', ['tag' => self::CACHE_TAG_TO_INVALIDATE]);
+            } catch (Throwable $e) {
+                Log::error('Falha ao invalidar cache de tickets.', [
+                    'tag' => self::CACHE_TAG_TO_INVALIDATE,
+                    'error' => $e->getMessage(),
+                ]);
             }
         }
     }

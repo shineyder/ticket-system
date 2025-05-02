@@ -5,27 +5,39 @@ namespace Tests\Integration\Infrastructure\Persistence\MongoDB\Projections;
 use App\Application\Events\DomainEventsPersisted;
 use App\Domain\Events\TicketCreated;
 use App\Domain\Events\TicketResolved;
+use App\Infrastructure\Persistence\Cache\CachingTicketReadRepository;
 use App\Domain\ValueObjects\Priority;
 use App\Domain\ValueObjects\Status;
+use App\Infrastructure\Persistence\MongoDB\MongoConnection;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
-use Illuminate\Support\Facades\DB;
-use MongoDB\BSON\UTCDateTime;
 use Tests\TestCase;
 use DateTimeImmutable;
 use Throwable;
+use MongoDB\BSON\UTCDateTime;
+use Illuminate\Support\Facades\Cache;
 
 class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
 {
-    const ERRORMESSAGE = "O listener UpdateTicketsReadModelProjection lançou uma exceção inesperada: ";
+    private const DATEFORMAT = 'Y-m-d\TH:i:s.v';
+    private const ERROR_MESSAGE = "O listener UpdateTicketsReadModelProjection lançou uma exceção inesperada: ";
+    private const CACHE_ERROR_MESSAGE = "Cache não foi setado corretamente antes do teste.";
+    private const CACHE_TEST_KEY = 'integration-test-cache-key';
+    private const CACHE_TEST_TAG = CachingTicketReadRepository::CACHE_TAG; // Usar a mesma tag da projeção
+
     use DatabaseMigrations; // Essencial para limpar e migrar 'tickets_test'
 
     private Dispatcher $dispatcher;
     private string $collectionName = 'ticket_read_models';
+    private MongoConnection $mongoConnection;
 
     protected function setUp(): void
     {
         parent::setUp();
+
+        $this->app['cache']->store('redis')->flush();
+
+        $this->mongoConnection = $this->app->make(MongoConnection::class);
         $this->dispatcher = $this->app->make(Dispatcher::class);
     }
 
@@ -34,10 +46,9 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
      */
     private function findReadModelInDb(string $ticketId): ?array
     {
-        $document = DB::connection('mongodb')
-            ->collection($this->collectionName)
-            ->where('ticket_id', $ticketId)
-            ->first();
+        $document = $this->mongoConnection->getDatabase()
+            ->selectCollection($this->collectionName)
+            ->findOne(['ticket_id' => $ticketId]);
 
         return $document ? (array) $document : null;
     }
@@ -57,11 +68,18 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
         );
         $appEvent = new DomainEventsPersisted([$event], $aggregateId, 'Ticket');
 
+        // Arrange: Coloca um item no cache para verificar a invalidação
+        Cache::tags(self::CACHE_TEST_TAG)->put(self::CACHE_TEST_KEY, 'exists', 600);
+        $this->assertTrue(
+            Cache::tags(self::CACHE_TEST_TAG)->has(self::CACHE_TEST_KEY),
+            self::CACHE_ERROR_MESSAGE
+        );
+
         // Act
         try {
             $this->dispatcher->dispatch($appEvent); // Listener será executado via sync queue
         } catch (Throwable $e) {
-            $this->fail(self::ERRORMESSAGE . $e->getMessage());
+            $this->fail(self::ERROR_MESSAGE . $e->getMessage());
         }
 
         // Assert: Verifica o documento no banco de dados 'tickets_test'
@@ -75,11 +93,19 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
         $this->assertSame(Status::OPEN, $dbData['status']);
         $this->assertInstanceOf(UTCDateTime::class, $dbData['created_at']);
         $this->assertEquals(
-            $createdAt,
-            $dbData['created_at']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            $createdAt->format(self::DATEFORMAT),
+            $dbData['created_at']->toDateTimeImmutable()
+                ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                ->format(self::DATEFORMAT)
         );
         $this->assertNull($dbData['resolved_at']);
         $this->assertInstanceOf(UTCDateTime::class, $dbData['last_updated_at']);
+
+        // Assert: Verifica se o cache foi invalidado
+        $this->assertFalse(
+            Cache::tags(self::CACHE_TEST_TAG)->has(self::CACHE_TEST_KEY),
+            "Cache não foi invalidado após TicketCreated."
+        );
     }
 
     /** @test */
@@ -98,11 +124,18 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
         $resolvedEvent = new TicketResolved($aggregateId, $resolvedAt);
         $resolvedAppEvent = new DomainEventsPersisted([$resolvedEvent], $aggregateId, 'Ticket');
 
+        // Arrange: Coloca um item no cache para verificar a invalidação
+        Cache::tags(self::CACHE_TEST_TAG)->put(self::CACHE_TEST_KEY, 'exists', 600);
+        $this->assertTrue(
+            Cache::tags(self::CACHE_TEST_TAG)->has(self::CACHE_TEST_KEY),
+            self::CACHE_ERROR_MESSAGE
+        );
+
         // Act
         try {
             $this->dispatcher->dispatch($resolvedAppEvent); // Dispara o evento de resolução
         } catch (Throwable $e) {
-            $this->fail(self::ERRORMESSAGE . $e->getMessage());
+            $this->fail(self::ERROR_MESSAGE . $e->getMessage());
         }
 
         // Assert: Verifica o documento atualizado no banco
@@ -114,13 +147,23 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
         $this->assertSame(Status::RESOLVED, $dbData['status']); // Status atualizado
         $this->assertInstanceOf(UTCDateTime::class, $dbData['resolved_at']);
         $this->assertEquals(
-            $resolvedAt,
-            $dbData['resolved_at']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            $resolvedAt->format(self::DATEFORMAT),
+            $dbData['resolved_at']->toDateTimeImmutable()
+                ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                ->format(self::DATEFORMAT)
         );
         // Verifica se created_at não mudou
         $this->assertEquals(
-            $createdAt,
-            $dbData['created_at']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            $createdAt->format(self::DATEFORMAT),
+            $dbData['created_at']->toDateTimeImmutable()
+                ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                ->format(self::DATEFORMAT)
+        );
+
+        // Assert: Verifica se o cache foi invalidado
+        $this->assertFalse(
+            Cache::tags(self::CACHE_TEST_TAG)->has(self::CACHE_TEST_KEY),
+            "Cache não foi invalidado após TicketResolved."
         );
     }
 
@@ -136,11 +179,18 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
         // Evento com ambos os eventos
         $appEvent = new DomainEventsPersisted([$createdEvent, $resolvedEvent], $aggregateId, 'Ticket');
 
+        // Arrange: Coloca um item no cache para verificar a invalidação
+        Cache::tags(self::CACHE_TEST_TAG)->put(self::CACHE_TEST_KEY, 'exists', 600);
+        $this->assertTrue(
+            Cache::tags(self::CACHE_TEST_TAG)->has(self::CACHE_TEST_KEY),
+            self::CACHE_ERROR_MESSAGE
+        );
+
         // Act
         try {
             $this->dispatcher->dispatch($appEvent);
         } catch (Throwable $e) {
-            $this->fail(self::ERRORMESSAGE . $e->getMessage());
+            $this->fail(self::ERROR_MESSAGE . $e->getMessage());
         }
 
         // Assert: Verifica o estado final no banco
@@ -152,12 +202,22 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
         $this->assertSame('medium', $dbData['priority']);
         $this->assertSame(Status::RESOLVED, $dbData['status']); // Estado final deve ser resolvido
         $this->assertEquals(
-            $createdAt,
-            $dbData['created_at']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            $createdAt->format(self::DATEFORMAT),
+            $dbData['created_at']->toDateTimeImmutable()
+                ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                ->format(self::DATEFORMAT)
         );
         $this->assertEquals(
-            $resolvedAt,
-            $dbData['resolved_at']->toDateTimeImmutable()->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+            $resolvedAt->format(self::DATEFORMAT),
+            $dbData['resolved_at']->toDateTimeImmutable()
+                ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
+                ->format(self::DATEFORMAT)
+        );
+
+        // Assert: Verifica se o cache foi invalidado
+        $this->assertFalse(
+            Cache::tags(self::CACHE_TEST_TAG)->has(self::CACHE_TEST_KEY),
+            "Cache não foi invalidado após múltiplos eventos."
         );
     }
 
@@ -169,15 +229,28 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
         $event = new TicketCreated($aggregateId, 'Ignore Title', 'Ignore Desc', Priority::LOW);
         $appEvent = new DomainEventsPersisted([$event], $aggregateId, 'NonTicketAggregate'); // Tipo diferente
 
+        // Arrange: Coloca um item no cache para verificar se ele NÃO será invalidado
+        Cache::tags(self::CACHE_TEST_TAG)->put(self::CACHE_TEST_KEY, 'exists', 600);
+        $this->assertTrue(
+            Cache::tags(self::CACHE_TEST_TAG)->has(self::CACHE_TEST_KEY),
+            self::CACHE_ERROR_MESSAGE
+        );
+
         // Act
         try {
             $this->dispatcher->dispatch($appEvent);
         } catch (Throwable $e) {
-            $this->fail(self::ERRORMESSAGE . $e->getMessage());
+            $this->fail(self::ERROR_MESSAGE . $e->getMessage());
         }
 
         // Assert: Verifica que NENHUM documento foi criado no banco
         $dbData = $this->findReadModelInDb($aggregateId);
         $this->assertNull($dbData, "Documento foi criado indevidamente para tipo de agregado diferente.");
+
+        // Assert: Verifica que o cache NÃO foi invalidado
+        $this->assertTrue(
+            Cache::tags(self::CACHE_TEST_TAG)->has(self::CACHE_TEST_KEY),
+            "Cache foi invalidado indevidamente para tipo de agregado diferente."
+        );
     }
 }

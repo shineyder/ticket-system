@@ -9,6 +9,7 @@ use App\Domain\Events\TicketResolved;
 use App\Domain\Interfaces\Repositories\TicketReadRepositoryInterface;
 use App\Domain\ValueObjects\Priority;
 use App\Domain\ValueObjects\Status;
+use App\Infrastructure\Persistence\Cache\CachingTicketReadRepository;
 use App\Infrastructure\Persistence\Exceptions\PersistenceOperationFailedException;
 use App\Infrastructure\Persistence\MongoDB\Projections\UpdateTicketsReadModelProjection;
 use DateTimeImmutable;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Log;
 use Mockery;
 use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
 use Tests\TestCase;
+use Illuminate\Cache\CacheManager;
 
 class UpdateTicketsReadModelProjectionTest extends TestCase
 {
@@ -23,14 +25,17 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
 
     private Mockery\MockInterface|TicketReadRepositoryInterface $mockReadRepository;
     private UpdateTicketsReadModelProjection $projection;
+    private Mockery\MockInterface|CacheManager $mockCacheManager;
 
     protected function setUp(): void
     {
         parent::setUp();
+
         $this->mockReadRepository = Mockery::mock(TicketReadRepositoryInterface::class);
+        $this->mockCacheManager = Mockery::mock(CacheManager::class);
 
         // Instancia a projeção injetando o mock
-        $this->projection = new UpdateTicketsReadModelProjection($this->mockReadRepository);
+        $this->projection = new UpdateTicketsReadModelProjection($this->mockReadRepository, $this->mockCacheManager);
     }
 
     /** @test */
@@ -70,6 +75,16 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
                        $dto->createdAt == $createdAt && // Use == for DateTime comparison
                        $dto->resolvedAt === null;
             }));
+
+        // Espera que o cache seja invalidado
+        $mockTaggedCache = Mockery::mock(\Illuminate\Cache\TaggedCache::class);
+        $this->mockCacheManager
+            ->shouldReceive('tags')
+            ->once()
+            ->with(CachingTicketReadRepository::CACHE_TAG)
+            ->andReturn($mockTaggedCache);
+        $mockTaggedCache->shouldReceive('flush')
+            ->once();
 
         // Act
         $this->projection->handle($appEvent);
@@ -117,6 +132,16 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
                        $dto->createdAt == $createdAt; // Verifica se outras props foram mantidas
             }));
 
+        // Espera que o cache seja invalidado
+        $mockTaggedCache = Mockery::mock(\Illuminate\Cache\TaggedCache::class);
+        $this->mockCacheManager
+            ->shouldReceive('tags')
+            ->once()
+            ->with(CachingTicketReadRepository::CACHE_TAG)
+            ->andReturn($mockTaggedCache);
+        $mockTaggedCache->shouldReceive('flush')
+            ->once();
+
         // Act
         $this->projection->handle($appEvent);
 
@@ -136,6 +161,7 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
         // Espera que NENHUM método do repositório seja chamado
         $this->mockReadRepository->shouldNotReceive('findById');
         $this->mockReadRepository->shouldNotReceive('save');
+        $this->mockCacheManager->shouldNotReceive('tags');
 
         // Act
         $this->projection->handle($appEvent);
@@ -192,6 +218,16 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
                        $dto->resolvedAt == $resolvedAt;
             }));
 
+        // Espera que o cache seja invalidado (apenas uma vez no final do handle)
+        $mockTaggedCache = Mockery::mock(\Illuminate\Cache\TaggedCache::class);
+        $this->mockCacheManager
+            ->shouldReceive('tags')
+            ->once()
+            ->with(CachingTicketReadRepository::CACHE_TAG) // Usar a constante
+            ->andReturn($mockTaggedCache);
+        $mockTaggedCache->shouldReceive('flush')
+            ->once();
+
         // Act
         $this->projection->handle($appEvent);
 
@@ -233,6 +269,8 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
                            $context['error'] === $exception->getMessage();
                 })
             );
+
+        $this->mockCacheManager->shouldNotReceive('tags');
 
         // Act
         $this->projection->handle($appEvent);

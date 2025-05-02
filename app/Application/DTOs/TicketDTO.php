@@ -4,11 +4,12 @@ namespace App\Application\DTOs;
 
 use App\Domain\ValueObjects\Status;
 use DateTimeImmutable;
+use JsonSerializable;
 
 /**
  * DTO para representar um Ticket em respostas de API e Read Models.
  */
-readonly class TicketDTO
+readonly class TicketDTO implements JsonSerializable
 {
     public function __construct(
         public readonly string $id,
@@ -47,5 +48,23 @@ readonly class TicketDTO
             $this->createdAt,
             $newResolvedAt // Nova data de resolução (ou a mesma)
         );
+    }
+
+    /**
+     * Especifica os dados que devem ser serializados para JSON.
+     *
+     * @return array<string, mixed>
+     */
+    public function jsonSerialize(): array
+    {
+        return [
+            'id' => $this->id,
+            'title' => $this->title,
+            'description' => $this->description,
+            'priority' => $this->priority,
+            'status' => $this->status,
+            'createdAt' => $this->createdAt?->format(DateTimeImmutable::ATOM), // Formato ISO8601 (RFC3339)
+            'resolvedAt' => $this->resolvedAt?->format(DateTimeImmutable::ATOM), // Formato ISO8601 se não for null
+        ];
     }
 }

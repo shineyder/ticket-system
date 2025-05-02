@@ -35,8 +35,12 @@ COPY .env .env
 # Copia o script de entrypoint para dentro do container
 COPY docker/app/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
-# Dá permissão de execução ao script
+# Copia o script de teste para dentro do container
+COPY docker/app/run-tests.sh /usr/local/bin/run-tests.sh
+
+# Dá permissão de execução aos scripts
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/run-tests.sh
 
 # Define o script como o ponto de entrada do container
 ENTRYPOINT ["docker-entrypoint.sh"]
