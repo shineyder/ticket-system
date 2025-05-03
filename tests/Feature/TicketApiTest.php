@@ -247,8 +247,8 @@ class TicketApiTest extends TestCase
                     'description',
                     'priority',
                     'status',
-                    'created_at',
-                    'resolved_at',
+                    'createdAt',
+                    'resolvedAt',
                     '_links' => [
                         'self' => ['href'],
                         'collection' => ['href'],
@@ -256,8 +256,8 @@ class TicketApiTest extends TestCase
                     ]
                 ]
             ])
-            ->assertJsonPath('data.created_at', $expectedCreatedAtString)
-            ->assertJsonPath('data.resolved_at', null);
+            ->assertJsonPath('data.createdAt', $expectedCreatedAtString)
+            ->assertJsonPath('data.resolvedAt', null);
     }
 
     /** @test */
@@ -303,8 +303,8 @@ class TicketApiTest extends TestCase
                         'description',
                         'priority',
                         'status',
-                        'created_at',
-                        'resolved_at',
+                        'createdAt',
+                        'resolvedAt',
                         '_links' => [
                             'self' => ['href'],
                             'collection' => ['href'],

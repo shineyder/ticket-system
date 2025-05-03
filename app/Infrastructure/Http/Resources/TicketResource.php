@@ -14,7 +14,7 @@ use DateTimeImmutable;
 class TicketResource extends JsonResource
 {
     /**
-     * O DTO ou Entidade sendo encapsulado.
+     * O DTO sendo encapsulado.
      *
      * @var TicketDTO
      */
@@ -28,34 +28,36 @@ class TicketResource extends JsonResource
     public function toArray(Request $request): array
     {
         // Dados principais do Ticket (vindos do DTO)
-        $data = [
-            'id' => $this->resource->id,
-            'title' => $this->resource->title,
-            'description' => $this->resource->description,
-            'status' => $this->resource->status, // Ex: 'OPEN', 'RESOLVED'
-            'priority' => $this->resource->priority, // Ex: 0, 1, 2
-            'created_at' => $this->resource->createdAt?->format(DateTimeImmutable::ATOM), // Formato ISO8601 (RFC3339),
-            'resolved_at' => $this->resource->resolvedAt?->format(DateTimeImmutable::ATOM), // Formato ISO8601 (RFC3339),
-        ];
+        $data = $this->resource->jsonSerialize();
 
         // Links HATEOAS
-        $links = [
-            'self' => ['href' => route('tickets.show', ['id' => $this->resource->id])],
-            'collection' => ['href' => route('tickets.index')],
-        ];
-
-        // Adiciona o link para resolver APENAS se o ticket estiver aberto
-        if ($this->resource->status === Status::OPEN) {
-            $links['resolve'] = [
-                'href' => route('tickets.resolve',
-                ['id' => $this->resource->id]),
-                'method' => 'PUT'
-            ];
-        }
+        $links = self::generateLinks($this->resource->id, $this->resource->status);
 
         $data['_links'] = $links;
 
         return $data;
+    }
+
+    /**
+     * Gera os links HATEOAS para um ticket com base no seu ID e status.
+     *
+     * @param string $ticketId O ID do ticket.
+     * @param string $ticketStatus O status atual do ticket (ex: Status::OPEN).
+     * @return array<string, array<string, string>> Os links HATEOAS.
+     */
+    public static function generateLinks(string $ticketId, string $ticketStatus): array
+    {
+        $links = [
+            'self' => ['href' => route('tickets.show', ['id' => $ticketId])],
+            'collection' => ['href' => route('tickets.index')],
+        ];
+
+        // Adiciona o link para resolver APENAS se o ticket estiver aberto
+        if ($ticketStatus === Status::OPEN) {
+            $links['resolve'] = ['href' => route('tickets.resolve', ['id' => $ticketId]), 'method' => 'PUT'];
+        }
+
+        return $links;
     }
 }
 

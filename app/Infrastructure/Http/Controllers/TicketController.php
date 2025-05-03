@@ -10,6 +10,7 @@ use App\Application\UseCases\Queries\GetAllTickets\GetAllTicketsQuery;
 use App\Application\UseCases\Queries\GetAllTickets\GetAllTicketsHandler;
 use App\Application\UseCases\Queries\GetTicketById\GetTicketByIdQuery;
 use App\Application\UseCases\Queries\GetTicketById\GetTicketByIdHandler;
+use App\Domain\ValueObjects\Status;
 use App\Infrastructure\Http\Requests\CreateTicketRequest;
 use App\Infrastructure\Http\Resources\TicketResource;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -38,9 +39,7 @@ class TicketController extends Controller
 
         $ticketId = $createHandler->handle($command);
 
-        $links = [
-            'self' => ['href' => route('tickets.show', ['id' => $ticketId])],
-        ];
+        $links = TicketResource::generateLinks($ticketId, Status::OPEN);
 
         // Retornar resposta de sucesso com o ID
         return response()->json([
@@ -60,9 +59,7 @@ class TicketController extends Controller
         $resolveHandler->handle($command);
 
         // Construir os links HATEOAS
-        $links = [
-            'self' => ['href' => route('tickets.show', ['id' => $id])],
-        ];
+        $links = TicketResource::generateLinks($id, Status::RESOLVED);
 
         return response()->json([
             'message' => 'Ticket resolvido!',

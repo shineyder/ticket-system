@@ -68,8 +68,8 @@ class TicketResourceTest extends TestCase
         $this->assertEquals($this->testId, $result['id']);
         $this->assertEquals('Test Title Open', $result['title']);
         $this->assertEquals(Status::OPEN, $result['status']);
-        $this->assertEquals($createdAt->format(DateTimeImmutable::ATOM), $result['created_at']);
-        $this->assertNull($result['resolved_at']);
+        $this->assertEquals($createdAt->format(DateTimeImmutable::ATOM), $result['createdAt']);
+        $this->assertNull($result['resolvedAt']);
 
         $this->assertArrayHasKey('_links', $result);
         $this->assertEquals(['href' => $this->baseUrl . self::TICKET_URL . $this->testId], $result['_links']['self']);
@@ -105,7 +105,7 @@ class TicketResourceTest extends TestCase
 
         // Assert
         $this->assertEquals(Status::RESOLVED, $result['status']);
-        $this->assertEquals($resolvedAt->format(DateTimeImmutable::ATOM), $result['resolved_at']);
+        $this->assertEquals($resolvedAt->format(DateTimeImmutable::ATOM), $result['resolvedAt']);
         $this->assertArrayHasKey('_links', $result);
         $this->assertArrayNotHasKey('resolve', $result['_links']); // NÃO deve ter o link resolve
         $this->assertEquals(['href' => $this->baseUrl . self::TICKET_URL . $this->testId], $result['_links']['self']);
