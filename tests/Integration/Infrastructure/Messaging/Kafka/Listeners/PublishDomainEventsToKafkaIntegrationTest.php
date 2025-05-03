@@ -6,6 +6,7 @@ use App\Application\Events\DomainEventsPersisted;
 use App\Domain\Events\TicketCreated;
 use App\Domain\Events\TicketResolved;
 use App\Domain\ValueObjects\Priority;
+use Illuminate\Cache\CacheManager;
 use Illuminate\Contracts\Events\Dispatcher;
 use Tests\TestCase;
 use Throwable;
@@ -13,11 +14,19 @@ use Throwable;
 class PublishDomainEventsToKafkaIntegrationTest extends TestCase
 {
     private Dispatcher $dispatcher;
+    private CacheManager $cache;
+
+    private const CACHE_PREFIX = 'processed_event_kafka:'; // Usar o mesmo prefixo do listener
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->dispatcher = $this->app->make(Dispatcher::class);
+
+        // Configura para usar Redis e limpa antes de cada teste
+        config(['cache.default' => 'redis']);
+        $this->cache = $this->app->make(CacheManager::class);
+        $this->app['cache']->store('redis')->flush();
     }
 
     /** @test */
@@ -25,13 +34,22 @@ class PublishDomainEventsToKafkaIntegrationTest extends TestCase
     {
         // Arrange
         $aggregateId = 'kafka-integration-test-1';
+        $eventId1 = 'event-kafka-int-1';
         $event1 = new TicketCreated(
             $aggregateId,
             'Kafka Integration Title',
             'Desc for Kafka test',
-            Priority::MEDIUM
+            Priority::MEDIUM,
+            null,
+            $eventId1
         );
-        $event2 = new TicketResolved($aggregateId);
+
+        $eventId2 = 'event-kafka-int-2';
+        $event2 = new TicketResolved(
+            $aggregateId,
+            null,
+            $eventId2
+        );
 
         $appEvent = new DomainEventsPersisted([$event1, $event2], $aggregateId, 'Ticket');
 
@@ -49,7 +67,49 @@ class PublishDomainEventsToKafkaIntegrationTest extends TestCase
         }
     }
 
-     /** @test */
+    /** @test */
+    public function it_handles_duplicate_event_dispatch_idempotently(): void
+    {
+        // Arrange
+        $aggregateId = 'kafka-idempotency-test-1';
+        $eventId = 'event-kafka-idem-1';
+        $event = new TicketCreated(
+            $aggregateId,
+            'Idempotency Title',
+            'Desc idempotency',
+            Priority::LOW,
+            null,
+            $eventId
+        );
+
+        $appEvent = new DomainEventsPersisted([$event], $aggregateId, 'Ticket');
+
+        $cacheKey = self::CACHE_PREFIX . $eventId;
+
+        // Act: First dispatch
+        try {
+            $this->dispatcher->dispatch($appEvent);
+
+            // Assert: Cache key should exist after first successful dispatch
+            $this->assertTrue($this->cache->has($cacheKey), "Cache key $cacheKey não foi setado após a primeira execução.");
+        } catch (Throwable $e) {
+            $this->fail("Primeira execução do listener falhou: " . $e->getMessage());
+        }
+
+        // Act: Second dispatch (same event)
+        try {
+            $this->dispatcher->dispatch($appEvent);
+
+            // Assert: Se chegou aqui, a segunda execução (que deveria ter sido pulada pela idempotência) não causou erro.
+            $this->assertTrue(true, "Segunda execução do listener não lançou exceção.");
+            // Idealmente, verificaríamos se o Kafka recebeu apenas uma mensagem, mas isso é complexo aqui.
+            // A verificação do cache já dá uma boa indicação.
+        } catch (Throwable $e) {
+            $this->fail("Segunda execução do listener (idempotência) falhou inesperadamente: " . $e->getMessage());
+        }
+    }
+
+    /** @test */
     public function it_ignores_events_for_other_aggregate_types(): void
     {
         // Arrange

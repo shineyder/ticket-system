@@ -17,7 +17,7 @@ use Tests\TestCase;
 
 class MongoEventStoreIntegrationTest extends TestCase
 {
-    private const DATEFORMAT = 'Y-m-d\TH:i:s.v';
+    private const DATE_FORMAT = 'Y-m-d\TH:i:s.v';
     use DatabaseMigrations; // Garante DB limpo e migrations rodadas a cada teste
 
     private TicketEventStoreInterface $eventStore;
@@ -76,13 +76,15 @@ class MongoEventStoreIntegrationTest extends TestCase
         $this->assertSame($ticketId, $dbEventData['aggregate_id']);
         $this->assertSame(TicketCreated::class, $dbEventData['event_type']);
         $this->assertSame(1, $dbEventData['sequence_number']);
+        $this->assertArrayHasKey('event_id', $dbEventData);
+        $this->assertIsString($dbEventData['event_id']);
         $this->assertInstanceOf(UTCDateTime::class, $dbEventData['occurred_on']);
         // Compara timestamps convertendo BSON para DateTimeImmutable
         $this->assertEquals(
-            $creationTime->format(self::DATEFORMAT),
+            $creationTime->format(self::DATE_FORMAT),
             $dbEventData['occurred_on']->toDateTimeImmutable()
                 ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
-                ->format(self::DATEFORMAT)
+                ->format(self::DATE_FORMAT)
         );
 
         $payload = json_decode($dbEventData['payload'], true);
@@ -101,8 +103,8 @@ class MongoEventStoreIntegrationTest extends TestCase
         $this->assertTrue($loadedTicket->getPriority()->equals(new Priority($priorityInt)));
         $this->assertTrue($loadedTicket->getStatus()->equals(new Status(Status::OPEN)));
         $this->assertEquals(
-            $creationTime->format(self::DATEFORMAT),
-            $loadedTicket->getCreatedAt()->format(self::DATEFORMAT)
+            $creationTime->format(self::DATE_FORMAT),
+            $loadedTicket->getCreatedAt()->format(self::DATE_FORMAT)
         );
         $this->assertNull($loadedTicket->getResolvedAt());
         $this->assertEmpty($loadedTicket->pullUncommittedEvents()); // Não deve ter eventos após carregar
@@ -135,22 +137,26 @@ class MongoEventStoreIntegrationTest extends TestCase
         $dbEvent1Data = (array) $dbEvents[0];
         $this->assertSame(1, $dbEvent1Data['sequence_number']);
         $this->assertSame(TicketCreated::class, $dbEvent1Data['event_type']);
+        $this->assertArrayHasKey('event_id', $dbEvent1Data);
+        $this->assertIsString($dbEvent1Data['event_id']);
         $this->assertEquals(
-            $creationTime->format(self::DATEFORMAT),
+            $creationTime->format(self::DATE_FORMAT),
             $dbEvent1Data['occurred_on']->toDateTimeImmutable()
                 ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
-                ->format(self::DATEFORMAT)
+                ->format(self::DATE_FORMAT)
         );
 
         // Verifica evento 2 (Resolved)
         $dbEvent2Data = (array) $dbEvents[1];
         $this->assertSame(2, $dbEvent2Data['sequence_number']);
         $this->assertSame(TicketResolved::class, $dbEvent2Data['event_type']);
+        $this->assertArrayHasKey('event_id', $dbEvent2Data);
+        $this->assertIsString($dbEvent2Data['event_id']);
         $this->assertEquals(
-            $resolveTime->format(self::DATEFORMAT),
+            $resolveTime->format(self::DATE_FORMAT),
             $dbEvent2Data['occurred_on']->toDateTimeImmutable()
                 ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
-                ->format(self::DATEFORMAT)
+                ->format(self::DATE_FORMAT)
         );
         $this->assertSame('[]', $dbEvent2Data['payload']); // Payload vazio para TicketResolved
 
@@ -162,12 +168,12 @@ class MongoEventStoreIntegrationTest extends TestCase
         $this->assertSame($ticketId, $loadedTicket->getId());
         $this->assertTrue($loadedTicket->getStatus()->equals(new Status(Status::RESOLVED)));
         $this->assertEquals(
-            $creationTime->format(self::DATEFORMAT),
-            $loadedTicket->getCreatedAt()->format(self::DATEFORMAT)
+            $creationTime->format(self::DATE_FORMAT),
+            $loadedTicket->getCreatedAt()->format(self::DATE_FORMAT)
         );
         $this->assertEquals(
-            $resolveTime->format(self::DATEFORMAT),
-            $loadedTicket->getResolvedAt()->format(self::DATEFORMAT)
+            $resolveTime->format(self::DATE_FORMAT),
+            $loadedTicket->getResolvedAt()->format(self::DATE_FORMAT)
         );
         $this->assertEmpty($loadedTicket->pullUncommittedEvents());
     }
@@ -200,12 +206,14 @@ class MongoEventStoreIntegrationTest extends TestCase
         $this->assertSame(1, ((array)$dbEvents[0])['sequence_number']);
         $this->assertSame(TicketCreated::class, ((array)$dbEvents[0])['event_type']);
         $this->assertSame(2, ((array)$dbEvents[1])['sequence_number']);
+        $this->assertArrayHasKey('event_id', ((array)$dbEvents[1]));
+        $this->assertIsString(((array)$dbEvents[1])['event_id']);
         $this->assertSame(TicketResolved::class, ((array)$dbEvents[1])['event_type']);
         $this->assertEquals(
-            $resolveTime->format(self::DATEFORMAT),
+            $resolveTime->format(self::DATE_FORMAT),
             ((array)$dbEvents[1])['occurred_on']->toDateTimeImmutable()
                 ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
-                ->format(self::DATEFORMAT)
+                ->format(self::DATE_FORMAT)
         );
 
         // Act: Load again
@@ -214,12 +222,12 @@ class MongoEventStoreIntegrationTest extends TestCase
         // Assert: Load (estado final)
         $this->assertTrue($reloadedTicket->getStatus()->equals(new Status(Status::RESOLVED)));
         $this->assertEquals(
-            $creationTime->format(self::DATEFORMAT),
-            $reloadedTicket->getCreatedAt()->format(self::DATEFORMAT)
+            $creationTime->format(self::DATE_FORMAT),
+            $reloadedTicket->getCreatedAt()->format(self::DATE_FORMAT)
         );
         $this->assertEquals(
-            $resolveTime->format(self::DATEFORMAT),
-            $reloadedTicket->getResolvedAt()->format(self::DATEFORMAT)
+            $resolveTime->format(self::DATE_FORMAT),
+            $reloadedTicket->getResolvedAt()->format(self::DATE_FORMAT)
         );
     }
 

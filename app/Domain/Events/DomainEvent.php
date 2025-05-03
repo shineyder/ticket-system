@@ -10,6 +10,11 @@ use DateTimeImmutable;
 interface DomainEvent
 {
     /**
+     * Retorna o ID desse evento especifico.
+     */
+    public function getEventId(): string;
+
+    /**
      * Retorna o ID do agregado ao qual este evento pertence.
      */
     public function getAggregateId(): string;

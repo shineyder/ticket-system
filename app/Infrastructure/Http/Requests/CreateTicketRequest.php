@@ -75,4 +75,26 @@ class CreateTicketRequest extends FormRequest
             'priority.in' => 'O valor fornecido para prioridade é inválido. Valores permitidos são: ' . implode(', ', Priority::getAllowedStringValues()),
         ];
     }
+
+    /**
+     * Handle tasks after validation passes.
+     *
+     * Sanitiza os campos de string para prevenir XSS.
+     *
+     * @return void
+     */
+    protected function passedValidation(): void
+    {
+        $sanitized = [];
+
+        // Sanitiza o título
+        $sanitized['title'] = htmlspecialchars($this->input('title'), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        // Sanitiza a descrição, apenas se ela existir (é nullable)
+        if ($this->filled('description')) {
+            $sanitized['description'] = htmlspecialchars($this->input('description'), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        }
+
+        $this->merge($sanitized); // Mescla os dados sanitizados de volta na requisição
+    }
 }

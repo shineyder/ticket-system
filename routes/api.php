@@ -8,9 +8,11 @@ Route::get('/health', function () {
     return new JsonResponse(['status' => 'ok']);
 });
 
-Route::controller(TicketController::class)->prefix('/ticket')->group(function () {
-    Route::post('/', 'store');
-    Route::put('/{id}', 'resolve');
-    Route::get('/{id}', 'show');
-    Route::get('/', 'all');
+Route::prefix('v1')->group(function () {
+    Route::controller(TicketController::class)->prefix('/ticket')->group(function () {
+        Route::post('/', 'store')->name('tickets.store');
+        Route::put('/{id}', 'resolve')->name('tickets.resolve');
+        Route::get('/{id}', 'show')->name('tickets.show');
+        Route::get('/', 'all')->name('tickets.index');
+    });
 });

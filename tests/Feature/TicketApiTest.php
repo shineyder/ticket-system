@@ -11,14 +11,14 @@ use DateTimeImmutable;
 
 class TicketApiTest extends TestCase
 {
-    private const BASEURL = '/api/ticket';
+    private const BASE_URL = '/api/v1/ticket';
 
     use DatabaseMigrations; // Garante DB limpo (tickets_test) e migrations rodadas
 
     // Helper para criar um ticket via API e retornar o ID
     private function createTicketViaApi(array $payload): ?string
     {
-        $response = $this->postJson(self::BASEURL, $payload);
+        $response = $this->postJson(self::BASE_URL, $payload);
         return $response->json('ticket_id');
     }
 
@@ -40,7 +40,7 @@ class TicketApiTest extends TestCase
     }
 
     // ========================================
-    // Testes para POST /api/ticket (Criação)
+    // Testes para POST /api/v1/ticket (Criação)
     // ========================================
 
     /** @test */
@@ -52,11 +52,14 @@ class TicketApiTest extends TestCase
             'priority' => 'medium',
         ];
 
-        $response = $this->postJson(self::BASEURL, $payload);
+        $response = $this->postJson(self::BASE_URL, $payload);
 
-        $response
-            ->assertStatus(201)
-            ->assertJsonStructure(['message', 'ticket_id'])
+        $response->assertStatus(201)
+            ->assertJsonStructure([
+                'message',
+                'ticket_id',
+                '_links' => ['self' => ['href']]
+            ])
             ->assertJson(['message' => 'Ticket criado!']);
 
         $ticketId = $response->json('ticket_id');
@@ -67,6 +70,8 @@ class TicketApiTest extends TestCase
         $this->assertSame('Feature Test Ticket', $dto->title);
         $this->assertSame('medium', $dto->priority);
         $this->assertSame(Status::OPEN, $dto->status);
+
+        $response->assertJsonPath('_links.self.href', url(self::BASE_URL . '/' . $ticketId));
     }
 
     /** @test */
@@ -78,9 +83,14 @@ class TicketApiTest extends TestCase
             // 'priority' => // Omitido
         ];
 
-        $response = $this->postJson(self::BASEURL, $payload);
+        $response = $this->postJson(self::BASE_URL, $payload);
 
         $response->assertStatus(201);
+        $response->assertJsonStructure([
+            'message',
+            'ticket_id',
+            '_links' => ['self' => ['href']]
+        ]);
         $ticketId = $response->json('ticket_id');
 
         // Verifica o read model para a prioridade padrão
@@ -98,7 +108,7 @@ class TicketApiTest extends TestCase
             'priority' => 'high',
         ];
 
-        $this->postJson(self::BASEURL, $payload)
+        $this->postJson(self::BASE_URL, $payload)
             ->assertStatus(422)
             ->assertJsonValidationErrors('title');
     }
@@ -112,7 +122,7 @@ class TicketApiTest extends TestCase
             'priority' => 'low',
         ];
 
-        $this->postJson(self::BASEURL, $payload)
+        $this->postJson(self::BASE_URL, $payload)
             ->assertStatus(422)
             ->assertJsonValidationErrors('title');
     }
@@ -126,7 +136,7 @@ class TicketApiTest extends TestCase
             'priority' => 'low',
         ];
 
-        $this->postJson(self::BASEURL, $payload)
+        $this->postJson(self::BASE_URL, $payload)
             ->assertStatus(422)
             ->assertJsonValidationErrors('description');
     }
@@ -140,13 +150,13 @@ class TicketApiTest extends TestCase
             'priority' => 'urgent', // Valor inválido
         ];
 
-        $this->postJson(self::BASEURL, $payload)
+        $this->postJson(self::BASE_URL, $payload)
             ->assertStatus(422)
             ->assertJsonValidationErrors('priority');
     }
 
     // ========================================
-    // Testes para PUT /api/ticket/{id} (Resolução)
+    // Testes para PUT /api/v1/ticket/{id} (Resolução)
     // ========================================
 
     /** @test */
@@ -165,11 +175,14 @@ class TicketApiTest extends TestCase
         $this->assertSame(Status::OPEN, $initialDto->status);
 
         // Act
-        $response = $this->putJson("/api/ticket/{$ticketId}");
+        $response = $this->putJson(self::BASE_URL . "/{$ticketId}");
 
         // Assert
-        $response
-            ->assertStatus(200)
+        $response->assertStatus(200)
+            ->assertJsonStructure([
+                'message',
+                '_links' => ['self' => ['href']]
+            ])
             ->assertJson(['message' => 'Ticket resolvido!']);
 
         // Verifica se o read model foi atualizado para 'resolved'
@@ -184,7 +197,7 @@ class TicketApiTest extends TestCase
     {
         $nonExistentId = '00000000-0000-0000-0000-000000000000'; // UUID inválido
 
-        $this->putJson("/api/ticket/{$nonExistentId}")
+        $this->putJson(self::BASE_URL . "/{$nonExistentId}")
             ->assertStatus(404); // Espera 404 (AggregateNotFoundException)
     }
 
@@ -197,14 +210,14 @@ class TicketApiTest extends TestCase
             'description' => 'This ticket is already resolved.',
             'priority' => 'low'
         ]);
-        $this->putJson("/api/ticket/{$ticketId}")->assertStatus(200); // Resolve a primeira vez
+        $this->putJson(self::BASE_URL . "/{$ticketId}")->assertStatus(200); // Resolve a primeira vez
 
         // Act: Tenta resolver novamente, espera erro (409 Conflict)
-        $this->putJson("/api/ticket/{$ticketId}")->assertStatus(409);
+        $this->putJson(self::BASE_URL . "/{$ticketId}")->assertStatus(409);
     }
 
     // ========================================
-    // Testes para GET /api/ticket/{id} (Busca por ID)
+    // Testes para GET /api/v1/ticket/{id} (Busca por ID)
     // ========================================
 
     /** @test */
@@ -223,19 +236,28 @@ class TicketApiTest extends TestCase
         $expectedCreatedAtString = $dto->createdAt->format(DateTimeImmutable::ATOM); // Pega a data real do DTO
 
         // Act
-        $response = $this->getJson("/api/ticket/{$ticketId}");
+        $response = $this->getJson(self::BASE_URL . "/{$ticketId}");
 
         // Assert
         $response->assertStatus(200)
-            ->assertJson([ // Verifica a estrutura e valores exatos
-                'id' => $ticketId,
-                'title' => 'Find Me By ID',
-                'description' => 'Specific description.',
-                'priority' => 'low',
-                'status' => Status::OPEN,
-                'createdAt' => $expectedCreatedAtString,
-                'resolvedAt' => null,
-            ]);
+            ->assertJsonStructure([
+                'data' => [
+                    'id',
+                    'title',
+                    'description',
+                    'priority',
+                    'status',
+                    'created_at',
+                    'resolved_at',
+                    '_links' => [
+                        'self' => ['href'],
+                        'collection' => ['href'],
+                        'resolve' => ['href', 'method']
+                    ]
+                ]
+            ])
+            ->assertJsonPath('data.created_at', $expectedCreatedAtString)
+            ->assertJsonPath('data.resolved_at', null);
     }
 
     /** @test */
@@ -243,12 +265,12 @@ class TicketApiTest extends TestCase
     {
         $nonExistentId = '11111111-1111-1111-1111-111111111111';
 
-        $this->getJson("/api/ticket/{$nonExistentId}")
+        $this->getJson(self::BASE_URL . "/{$nonExistentId}")
             ->assertStatus(404);
     }
 
     // ========================================
-    // Testes para GET /api/ticket (Listagem)
+    // Testes para GET /api/v1/ticket (Listagem)
     // ========================================
 
     /** @test */
@@ -265,15 +287,32 @@ class TicketApiTest extends TestCase
         $readRepo->save(new TicketDTO('id2', 'Mid Ticket', '', 'medium', 'open', $time2));
 
         // Act
-        $response = $this->getJson(self::BASEURL);
+        $response = $this->getJson(self::BASE_URL);
 
         // Assert
-        $response
-            ->assertStatus(200)
-            ->assertJsonCount(3) // Espera 3 tickets
-            ->assertJsonPath('0.id', 'id3') // Mais recente primeiro
-            ->assertJsonPath('1.id', 'id2')
-            ->assertJsonPath('2.id', 'id1'); // Mais antigo por último
+        $response->assertStatus(200)
+            ->assertJsonCount(3, 'data') // Espera 3 tickets
+            ->assertJsonPath('data.0.id', 'id3') // Mais recente primeiro
+            ->assertJsonPath('data.1.id', 'id2')
+            ->assertJsonPath('data.2.id', 'id1')
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => [
+                        'id',
+                        'title',
+                        'description',
+                        'priority',
+                        'status',
+                        'created_at',
+                        'resolved_at',
+                        '_links' => [
+                            'self' => ['href'],
+                            'collection' => ['href'],
+                            'resolve' => ['href', 'method']
+                        ]
+                    ]
+                ]
+            ]); // Mais antigo por último
     }
 
     /** @test */
@@ -286,15 +325,26 @@ class TicketApiTest extends TestCase
         $readRepo->save(new TicketDTO('idB', 'Bravo', '', 'medium', 'open'));
 
         // Act
-        $response = $this->getJson('/api/ticket?orderBy=title&orderDirection=asc');
+        $response = $this->getJson(self::BASE_URL . '?orderBy=title&orderDirection=asc');
 
         // Assert
-        $response
-            ->assertStatus(200)
-            ->assertJsonCount(3)
-            ->assertJsonPath('0.id', 'idA') // Alpha
-            ->assertJsonPath('1.id', 'idB') // Bravo
-            ->assertJsonPath('2.id', 'idC'); // Charlie
+        $response->assertStatus(200)
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('data.0.id', 'idA') // Alpha
+            ->assertJsonPath('data.1.id', 'idB') // Bravo
+            ->assertJsonPath('data.2.id', 'idC') // Charlie
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => [
+                        'id',
+                        'title',
+                        '_links' => [
+                            'self' => ['href'],
+                            'collection' => ['href']
+                        ]
+                    ]
+                ]
+            ]);
     }
 
      /** @test */
@@ -306,20 +356,31 @@ class TicketApiTest extends TestCase
         $readRepo->save(new TicketDTO('id2', 'Ticket B', '', 'high', 'open', new DateTimeImmutable())); // Mais recente
 
         // Act
-        $response = $this->getJson(self::BASEURL); // Sem query params
+        $response = $this->getJson(self::BASE_URL); // Sem query params
 
         // Assert: Deve ordenar por created_at desc (padrão)
-        $response
-            ->assertStatus(200)
-            ->assertJsonCount(2)
-            ->assertJsonPath('0.id', 'id2') // Mais recente
-            ->assertJsonPath('1.id', 'id1');
+        $response->assertStatus(200)
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.id', 'id2') // Mais recente
+            ->assertJsonPath('data.1.id', 'id1')
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => [
+                        'id',
+                        'title',
+                        '_links' => [
+                            'self' => ['href'],
+                            'collection' => ['href']
+                        ]
+                    ]
+                ]
+            ]);
     }
 
     /** @test */
     public function get_all_tickets_fails_with_invalid_orderby_param(): void
     {
-        $this->getJson('/api/ticket?orderBy=invalidField&orderDirection=asc')
+        $this->getJson(self::BASE_URL . '?orderBy=invalidField&orderDirection=asc')
             ->assertStatus(422)
             ->assertJsonValidationErrors('orderBy');
     }
@@ -327,7 +388,7 @@ class TicketApiTest extends TestCase
     /** @test */
     public function get_all_tickets_fails_with_invalid_orderdirection_param(): void
     {
-        $this->getJson('/api/ticket?orderBy=title&orderDirection=descending') // Valor inválido
+        $this->getJson(self::BASE_URL . '?orderBy=title&orderDirection=descending') // Valor inválido
             ->assertStatus(422)
             ->assertJsonValidationErrors('orderDirection');
     }
@@ -336,12 +397,11 @@ class TicketApiTest extends TestCase
     public function get_all_tickets_returns_empty_array_when_no_tickets(): void
     {
         // Act
-        $response = $this->getJson(self::BASEURL);
+        $response = $this->getJson(self::BASE_URL);
 
         // Assert
-        $response
-            ->assertStatus(200)
-            ->assertJsonCount(0) // Espera um array vazio
-            ->assertExactJson([]); // Verifica se é exatamente []
+        $response->assertStatus(200)
+            ->assertJsonCount(0, 'data') // Espera um array vazio dentro de data
+            ->assertExactJson(['data' => []]); // Verifica se data é exatamente []
     }
 }

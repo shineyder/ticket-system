@@ -191,6 +191,7 @@ class MongoEventStore implements TicketEventStoreInterface
             'aggregate_id' => $aggregateId,
             'aggregate_type' => 'Ticket', // Tipo do agregado
             'event_type' => get_class($event), // Classe do evento para reconstituição
+            'event_id' => $event->getEventId(),
             'payload' => json_encode($payloadData), // Serializa o payload como JSON
             'sequence_number' => $sequenceNumber, // Número de ordem do evento para este agregado
             'occurred_on' => new UTCDateTime($event->getOccurredOn()), // Converte para BSON UTCDateTime
@@ -209,6 +210,7 @@ class MongoEventStore implements TicketEventStoreInterface
     {
         $data = (array) $eventData; // Garante que é um array para acesso fácil
         $eventType = $data['event_type'];
+        $eventId = $data['event_id'] ?? null;
         $aggregateId = $data['aggregate_id'];
 
         if (!class_exists($eventType)) {
@@ -221,7 +223,7 @@ class MongoEventStore implements TicketEventStoreInterface
             // Converte para DateTimeImmutable aqui para garantir o tipo correto
             $occurredOn = $this->convertOccurredOnToImmutable($data);
 
-            return $this->instantiateEvent($eventType, $aggregateId, $payload, $occurredOn);
+            return $this->instantiateEvent($eventType, $aggregateId, $payload, $occurredOn, $eventId);
         } catch (\ReflectionException | \TypeError | Exception $e) {
             throw new EventInstantiateFailedException($eventType, $e);
         }
@@ -250,6 +252,7 @@ class MongoEventStore implements TicketEventStoreInterface
      * @param string $aggregateId O ID do agregado.
      * @param array $payload Dados do payload.
      * @param DateTimeImmutable $occurredOn Momento da ocorrência.
+     * @param string|null $eventId O ID original do evento (pode ser null se não salvo).
      * @return DomainEvent
      * @throws ReflectionException | TypeError | Exception
      */
@@ -257,7 +260,8 @@ class MongoEventStore implements TicketEventStoreInterface
         string $eventType,
         string $aggregateId,
         array $payload,
-        DateTimeImmutable $occurredOn
+        DateTimeImmutable $occurredOn,
+        ?string $eventId = null
     ): DomainEvent
     {
         $reflectionClass = new \ReflectionClass($eventType);
@@ -271,7 +275,8 @@ class MongoEventStore implements TicketEventStoreInterface
                     $param,
                     $aggregateId,
                     $payload,
-                    $occurredOn
+                    $occurredOn,
+                    $eventId
                 );
             }
         }
@@ -288,6 +293,7 @@ class MongoEventStore implements TicketEventStoreInterface
      * @param string $aggregateId O ID do agregado.
      * @param array $payload O payload decodificado do evento.
      * @param DateTimeImmutable $occurredOn O timestamp do evento.
+     * @param string|null $eventId O ID original do evento recuperado.
      * @return mixed O valor resolvido para o argumento.
      * @throws \InvalidArgumentException Se um parâmetro obrigatório não puder ser resolvido.
      */
@@ -295,38 +301,42 @@ class MongoEventStore implements TicketEventStoreInterface
         ReflectionParameter $param,
         string $aggregateId,
         array $payload,
-        DateTimeImmutable $occurredOn
+        DateTimeImmutable $occurredOn,
+        ?string $eventId = null
     ): mixed {
         $paramName = $param->getName();
         $paramType = $param->getType();
+        $resolvedValue = null;
 
         // --- Lógica específica para parâmetros especiais ---
         if ($paramName === 'id') {
-            return $aggregateId;
-        }
-        if ($paramName === 'occurredOn') {
-            return $occurredOn;
-        }
-        // --- Fim da lógica específica ---
+            $resolvedValue = $aggregateId;
+        } elseif ($paramName === 'occurredOn') {
+            $resolvedValue = $occurredOn;
+        } elseif ($paramName === 'eventId') {
+            $resolvedValue = $eventId;
+        } else {
+            // --- Lógica para parâmetros do payload ---
+            // Verificar se o parâmetro existe no payload
+            if (array_key_exists($paramName, $payload)) {
+                $valueFromPayload = $payload[$paramName];
+                $resolvedValue = $valueFromPayload;
 
-        $valueFromPayload = null;
-        // Verificar se o parâmetro existe no payload
-        if (array_key_exists($paramName, $payload)) {
-            $valueFromPayload = $payload[$paramName];
-
-            // Tentar instanciar como Value Object, se aplicável
-            if ($paramType instanceof ReflectionNamedType && !$paramType->isBuiltin()) {
-                $typeName = $paramType->getName();
-                // Verifica se existe uma fábrica registrada para este tipo de VO
-                if (isset($this->valueObjectFactories[$typeName])) {
-                    // Chama a função de fábrica correspondente
-                    return ($this->valueObjectFactories[$typeName])($valueFromPayload);
+                // Tentar instanciar como Value Object, se aplicável
+                if ($paramType instanceof ReflectionNamedType && !$paramType->isBuiltin()) {
+                    $typeName = $paramType->getName();
+                    // Verifica se existe uma fábrica registrada para este tipo de VO
+                    if (isset($this->valueObjectFactories[$typeName])) {
+                        // Chama a função de fábrica correspondente
+                        return ($this->valueObjectFactories[$typeName])($valueFromPayload);
+                    }
+                    // Se não for um VO conhecido, $resolvedValue mantém o valor do payload
                 }
+                // Se for um tipo primitivo, $resolvedValue já contém o valor do payload
             }
+            // Se a chave não existe no payload, $resolvedValue permanece null
         }
 
-        // Se for um parâmetro do tipo primitivo retorna o valor do payload
-        // Se não houver valor fornecido então é um parâmetro opcional não fornecido e sem default, retorna null
-        return $valueFromPayload ?? null;
+        return $resolvedValue;
     }
 }

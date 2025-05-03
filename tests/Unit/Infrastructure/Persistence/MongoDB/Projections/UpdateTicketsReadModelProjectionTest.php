@@ -27,6 +27,8 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
     private UpdateTicketsReadModelProjection $projection;
     private Mockery\MockInterface|CacheManager $mockCacheManager;
 
+    private const CACHE_PREFIX = 'processed_event:';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -44,13 +46,15 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
         // Arrange
         $aggregateId = 'proj-create-123';
         $createdAt = new DateTimeImmutable('2024-02-01T12:00:00Z');
+        $eventId = 'event-proj-create-1';
         $eventPriorityInt = Priority::HIGH;
         $event = new TicketCreated(
             $aggregateId,
             'Projection Title',
             'Projection Desc',
             $eventPriorityInt,
-            $createdAt
+            $createdAt,
+            $eventId
         );
         $appEvent = new DomainEventsPersisted([$event], $aggregateId, 'Ticket');
 
@@ -60,6 +64,12 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
             ->once()
             ->with($aggregateId)
             ->andReturnNull();
+
+        // Espera verificação de idempotência (retorna false)
+        $this->mockCacheManager->shouldReceive('has')
+            ->with(self::CACHE_PREFIX . $eventId)
+            ->once()
+            ->andReturnFalse();
 
         // Espera que save seja chamado com o DTO correto
         $expectedPriorityString = (new Priority($eventPriorityInt))->toString();
@@ -74,7 +84,14 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
                        $dto->status === Status::OPEN &&
                        $dto->createdAt == $createdAt && // Use == for DateTime comparison
                        $dto->resolvedAt === null;
-            }));
+            }))
+            ->ordered();
+
+        // Espera que o cache de idempotência seja setado APÓS o save
+        $this->mockCacheManager->shouldReceive('put')
+            ->with(self::CACHE_PREFIX . $eventId, true, Mockery::any())
+            ->once()
+            ->ordered();
 
         // Espera que o cache seja invalidado
         $mockTaggedCache = Mockery::mock(\Illuminate\Cache\TaggedCache::class);
@@ -100,7 +117,13 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
         $aggregateId = 'proj-resolve-456';
         $createdAt = new DateTimeImmutable('2024-02-01T13:00:00Z');
         $resolvedAt = new DateTimeImmutable('2024-02-01T14:00:00Z');
-        $event = new TicketResolved($aggregateId, $resolvedAt);
+        $eventId = 'event-proj-resolve-1';
+        $event = new TicketResolved(
+            $aggregateId,
+            $resolvedAt,
+            $eventId
+        );
+
         $appEvent = new DomainEventsPersisted([$event], $aggregateId, 'Ticket');
 
         // DTO existente que será retornado por findById
@@ -121,6 +144,12 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
             ->with($aggregateId)
             ->andReturn($existingDto);
 
+        // Espera verificação de idempotência (retorna false)
+        $this->mockCacheManager->shouldReceive('has')
+            ->with(self::CACHE_PREFIX . $eventId)
+            ->once()
+            ->andReturnFalse();
+
         // Espera que save seja chamado com o DTO atualizado
         $this->mockReadRepository
             ->shouldReceive('save')
@@ -130,8 +159,15 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
                        $dto->status === Status::RESOLVED &&
                        $dto->resolvedAt == $resolvedAt && // Verifica se a data de resolução foi atualizada
                        $dto->createdAt == $createdAt; // Verifica se outras props foram mantidas
-            }));
+            }))
+            ->ordered();
 
+        // Espera que o cache de idempotência seja setado APÓS o save
+        $this->mockCacheManager->shouldReceive('put')
+            ->with(self::CACHE_PREFIX . $eventId, true, Mockery::any())
+            ->once()
+            ->ordered();
+        
         // Espera que o cache seja invalidado
         $mockTaggedCache = Mockery::mock(\Illuminate\Cache\TaggedCache::class);
         $this->mockCacheManager
@@ -177,10 +213,23 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
         $aggregateId = 'proj-multi-000';
         $createdAt = new DateTimeImmutable('2024-03-01T10:00:00Z');
         $resolvedAt = new DateTimeImmutable('2024-03-01T11:00:00Z');
+        $eventId1 = 'event-proj-multi-1';
+        $eventId2 = 'event-proj-multi-2';
         $eventPriorityInt = Priority::MEDIUM;
 
-        $createdEvent = new TicketCreated($aggregateId, 'Multi Title', 'Multi Desc', Priority::MEDIUM, $createdAt);
-        $resolvedEvent = new TicketResolved($aggregateId, $resolvedAt);
+        $createdEvent = new TicketCreated(
+            $aggregateId,
+            'Multi Title',
+            'Multi Desc',
+            Priority::MEDIUM,
+            $createdAt,
+            $eventId1
+        );
+        $resolvedEvent = new TicketResolved(
+            $aggregateId,
+            $resolvedAt,
+            $eventId2
+        );
 
         $appEvent = new DomainEventsPersisted([$createdEvent, $resolvedEvent], $aggregateId, 'Ticket');
 
@@ -191,14 +240,29 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
             ->with($aggregateId)
             ->andReturnNull();
 
+        // Expect idempotency check for event 1
+        $this->mockCacheManager->shouldReceive('has')
+            ->with(self::CACHE_PREFIX . $eventId1)
+            ->once()
+            ->andReturnFalse();
+
         // Expect save for TicketCreated
         $expectedPriorityString = (new Priority($eventPriorityInt))->toString();
         $this->mockReadRepository
             ->shouldReceive('save')
             ->once()
             ->with(Mockery::on(function(TicketDTO $dto) use ($aggregateId, $expectedPriorityString) {
-                return $dto->id === $aggregateId && $dto->priority === $expectedPriorityString && $dto->status === Status::OPEN;
-            }));
+                return $dto->id === $aggregateId &&
+                       $dto->priority === $expectedPriorityString &&
+                       $dto->status === Status::OPEN;
+            }))
+            ->ordered();
+
+        // Expect cache put for event 1
+        $this->mockCacheManager->shouldReceive('put')
+            ->with(self::CACHE_PREFIX . $eventId1, true, Mockery::any())
+            ->once()
+            ->ordered();
 
         // Expect findById for TicketResolved (returns the DTO created above)
         $dtoAfterCreate = new TicketDTO($aggregateId, 'Multi Title', 'Multi Desc', $expectedPriorityString, Status::OPEN, $createdAt, null);
@@ -208,6 +272,12 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
             ->with($aggregateId)
             ->andReturn($dtoAfterCreate); // Retorna o DTO como se tivesse sido salvo
 
+        // Expect idempotency check for event 2
+        $this->mockCacheManager->shouldReceive('has')
+            ->with(self::CACHE_PREFIX . $eventId2)
+            ->once()
+            ->andReturnFalse();
+
         // Expect save for TicketResolved (com o DTO atualizado)
         $this->mockReadRepository
             ->shouldReceive('save')
@@ -216,7 +286,14 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
                 return $dto->id === $aggregateId &&
                        $dto->status === Status::RESOLVED &&
                        $dto->resolvedAt == $resolvedAt;
-            }));
+            }))
+            ->ordered();
+
+        // Expect cache put for event 2
+        $this->mockCacheManager->shouldReceive('put')
+            ->with(self::CACHE_PREFIX . $eventId2, true, Mockery::any())
+            ->once()
+            ->ordered();
 
         // Espera que o cache seja invalidado (apenas uma vez no final do handle)
         $mockTaggedCache = Mockery::mock(\Illuminate\Cache\TaggedCache::class);
@@ -240,8 +317,16 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
     {
         // Arrange
         $aggregateId = 'proj-error-111';
+        $eventId = 'event-proj-error-1';
         $eventPriorityInt = Priority::LOW;
-        $event = new TicketCreated($aggregateId, 'Error Title', 'Error Desc', $eventPriorityInt);
+        $event = new TicketCreated(
+            $aggregateId,
+            'Error Title',
+            'Error Desc',
+            $eventPriorityInt,
+            null,
+            $eventId
+        );
         $appEvent = new DomainEventsPersisted([$event], $aggregateId, 'Ticket');
         $exception = new PersistenceOperationFailedException('DB error');
 
@@ -250,6 +335,12 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
             ->once()
             ->with($aggregateId)
             ->andReturnNull();
+        
+        // Espera verificação de idempotência (retorna false)
+        $this->mockCacheManager->shouldReceive('has')
+            ->with(self::CACHE_PREFIX . $eventId)
+            ->once()
+            ->andReturnFalse();
 
         // Simula erro no save
         $this->mockReadRepository
@@ -258,6 +349,8 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
             ->with(Mockery::type(TicketDTO::class))
             ->andThrow($exception);
 
+        $this->mockCacheManager->shouldNotReceive('put');
+        
         // Espera que o erro seja logado
         Log::shouldReceive('error')
             ->once()
@@ -277,5 +370,45 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
 
         // Assert (implicit)
         $this->assertTrue(true); // O listener não deve relançar a exceção por padrão
+    }
+
+    /** @test */
+    public function it_skips_processing_if_event_already_processed_in_cache(): void
+    {
+        // Arrange
+        $aggregateId = 'proj-skip-789';
+        $eventId = 'event-proj-skip-1';
+        $event = new TicketCreated(
+            $aggregateId,
+            'Skip Title',
+            'Skip Desc',
+            Priority::LOW,
+            null,
+            $eventId
+        );
+
+        $appEvent = new DomainEventsPersisted([$event], $aggregateId, 'Ticket');
+
+        // Espera verificação de idempotência (retorna TRUE)
+        $this->mockCacheManager->shouldReceive('has')
+            ->with(self::CACHE_PREFIX . $eventId)
+            ->once()
+            ->andReturnTrue();
+
+        // Assert: Nenhum método do repositório deve ser chamado
+        $this->mockReadRepository->shouldNotReceive('findById');
+        $this->mockReadRepository->shouldNotReceive('save');
+
+        // Assert: Cache put não deve ser chamado
+        $this->mockCacheManager->shouldNotReceive('put');
+
+        // Assert: Invalidação de tag também não deve ocorrer (pois não houve save)
+        $this->mockCacheManager->shouldNotReceive('tags');
+
+        // Act
+        $this->projection->handle($appEvent);
+
+        // Assert (implicit)
+        $this->assertTrue(true);
     }
 }

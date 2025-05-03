@@ -12,7 +12,7 @@ use DateTimeImmutable;
 
 class MongoTicketReadRepositoryIntegrationTest extends TestCase
 {
-    private const DATEFORMAT = 'Y-m-d\TH:i:s.v';
+    private const DATE_FORMAT = 'Y-m-d\TH:i:s.v';
     use DatabaseMigrations; // Garante DB limpo e migrations rodadas a cada teste
 
     private MongoTicketReadRepository $readRepository;
@@ -73,10 +73,10 @@ class MongoTicketReadRepositoryIntegrationTest extends TestCase
         $this->assertSame('open', $dbData['status']);
         $this->assertInstanceOf(UTCDateTime::class, $dbData['created_at']);
         $this->assertEquals(
-            $now->format(self::DATEFORMAT),
+            $now->format(self::DATE_FORMAT),
             $dbData['created_at']->toDateTimeImmutable()
                 ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
-                ->format(self::DATEFORMAT)
+                ->format(self::DATE_FORMAT)
         );
         $this->assertNull($dbData['resolved_at']);
         $this->assertInstanceOf(UTCDateTime::class, $dbData['last_updated_at']);
@@ -122,19 +122,19 @@ class MongoTicketReadRepositoryIntegrationTest extends TestCase
         // Verifica se createdAt NÃO foi alterado ($setOnInsert funcionou)
         $this->assertInstanceOf(UTCDateTime::class, $dbDataUpdated['created_at']);
         $this->assertEquals(
-            $initialTime->format(self::DATEFORMAT), // Deve ser igual ao tempo inicial
+            $initialTime->format(self::DATE_FORMAT), // Deve ser igual ao tempo inicial
             $dbDataUpdated['created_at']->toDateTimeImmutable()
                 ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
-                ->format(self::DATEFORMAT)
+                ->format(self::DATE_FORMAT)
         );
 
         // Verifica resolvedAt
         $this->assertInstanceOf(UTCDateTime::class, $dbDataUpdated['resolved_at']);
         $this->assertEquals(
-            $resolvedTime->format(self::DATEFORMAT),
+            $resolvedTime->format(self::DATE_FORMAT),
             $dbDataUpdated['resolved_at']->toDateTimeImmutable()
                 ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
-                ->format(self::DATEFORMAT)
+                ->format(self::DATE_FORMAT)
         );
 
         // Verifica se last_updated_at foi atualizado
@@ -161,7 +161,7 @@ class MongoTicketReadRepositoryIntegrationTest extends TestCase
         $this->assertSame('Desc find', $foundDto->description);
         $this->assertSame('low', $foundDto->priority);
         $this->assertSame('open', $foundDto->status);
-        $this->assertEquals($now->format(self::DATEFORMAT), $foundDto->createdAt->format(self::DATEFORMAT));
+        $this->assertEquals($now->format(self::DATE_FORMAT), $foundDto->createdAt->format(self::DATE_FORMAT));
         $this->assertNull($foundDto->resolvedAt);
     }
 

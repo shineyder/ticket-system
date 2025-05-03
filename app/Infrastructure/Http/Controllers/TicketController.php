@@ -11,7 +11,10 @@ use App\Application\UseCases\Queries\GetAllTickets\GetAllTicketsHandler;
 use App\Application\UseCases\Queries\GetTicketById\GetTicketByIdQuery;
 use App\Application\UseCases\Queries\GetTicketById\GetTicketByIdHandler;
 use App\Infrastructure\Http\Requests\CreateTicketRequest;
+use App\Infrastructure\Http\Resources\TicketResource;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use App\Infrastructure\Http\Requests\GetAllTicketsRequest;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
 
 class TicketController extends Controller
@@ -19,7 +22,8 @@ class TicketController extends Controller
     public function store(
         CreateTicketRequest $request,
         CreateTicketHandler $createHandler
-    ) {
+    ): JsonResponse
+    {
         // A validação já foi feita automaticamente pelo Laravel!
         // Se a validação falhar, o Laravel retorna uma resposta de erro JSON
 
@@ -34,40 +38,55 @@ class TicketController extends Controller
 
         $ticketId = $createHandler->handle($command);
 
+        $links = [
+            'self' => ['href' => route('tickets.show', ['id' => $ticketId])],
+        ];
+
         // Retornar resposta de sucesso com o ID
         return response()->json([
             'message' => 'Ticket criado!',
-            'ticket_id' => $ticketId
-        ], 201);
+            'ticket_id' => $ticketId,
+            '_links' => $links
+        ], JsonResponse::HTTP_CREATED);
     }
 
     public function resolve(
         string $id,
         ResolveTicketHandler $resolveHandler
-    ) {
+    ): JsonResponse
+    {
         $command = new ResolveTicketCommand($id);
 
         $resolveHandler->handle($command);
 
-        return response()->json(['message' => 'Ticket resolvido!']); //Status 200 por padrão
+        // Construir os links HATEOAS
+        $links = [
+            'self' => ['href' => route('tickets.show', ['id' => $id])],
+        ];
+
+        return response()->json([
+            'message' => 'Ticket resolvido!',
+            '_links' => $links
+        ]); //Status 200 por padrão
     }
 
     public function show(
         string $id,
         GetTicketByIdHandler $getByIdHandler
-    ) {
+    ): TicketResource
+    {
         $query = new GetTicketByIdQuery($id);
 
         // Retorna TicketDTO ou lança exception
         $ticket = $getByIdHandler->handle($query);
 
-        return response()->json($ticket);
+        return new TicketResource($ticket);
     }
 
     public function all(
         GetAllTicketsHandler $getAllTicketsHandler,
         GetAllTicketsRequest $request
-    )
+    ): AnonymousResourceCollection
     {
         $validated = $request->validated();
 
@@ -77,8 +96,8 @@ class TicketController extends Controller
         );
 
         // Retorna array de TicketDTO ou lança exception
-        $ticket = $getAllTicketsHandler->handle($query);
+        $tickets = $getAllTicketsHandler->handle($query);
 
-        return response()->json($ticket);
+        return TicketResource::collection($tickets);
     }
 }

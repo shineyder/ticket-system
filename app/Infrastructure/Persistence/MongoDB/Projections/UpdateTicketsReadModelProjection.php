@@ -17,6 +17,30 @@ use Throwable;
 class UpdateTicketsReadModelProjection implements ShouldQueue
 {
     private const CACHE_TAG_TO_INVALIDATE = 'tickets-list';
+    private const PROCESSED_EVENT_CACHE_PREFIX = 'processed_event:';
+    private const PROCESSED_EVENT_TTL = 900; // 15 minutos
+
+    /**
+     * O número máximo de vezes que o job pode ser tentado.
+     * (Inclui a primeira tentativa)
+     */
+    public int $tries = 5;
+
+    /**
+     * O número máximo de exceções permitidas antes de falhar.
+     */
+    public int $maxExceptions = 3;
+
+    /**
+     * Calcula o número de segundos de espera antes de tentar o job novamente (backoff exponencial).
+     *
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [10, 30, 60]; // Segundos de espera para as tentativas 2, 3 e 4 (a 5ª falhará se chegar lá)
+    }
+
     public function __construct(
         private TicketReadRepositoryInterface $readRepository,
         private readonly CacheManager $cache
@@ -38,6 +62,18 @@ class UpdateTicketsReadModelProjection implements ShouldQueue
         $cacheNeedsInvalidation = false;
 
         foreach ($eventWrapper->domainEvents as $domainEvent) {
+            $eventId = $domainEvent->getEventId();
+            $processedEventCacheKey = self::PROCESSED_EVENT_CACHE_PREFIX . $eventId;
+
+            // Verificar Idempotência
+            if ($this->cache->has($processedEventCacheKey)) {
+                Log::debug('Evento já processado, pulando (idempotência).', [
+                    'eventId' => $eventId,
+                    'eventType' => get_class($domainEvent)
+                ]);
+                continue; // Pula para o próximo evento
+            }
+
             try {
                 // Carrega o DTO atual (ou null se for novo)
                 $currentDto = $this->readRepository->findById($aggregateId);
@@ -49,8 +85,10 @@ class UpdateTicketsReadModelProjection implements ShouldQueue
                 if ($updatedDto) {
                     $this->readRepository->save($updatedDto);
                     $cacheNeedsInvalidation = true;
-                }
 
+                    // Marcar como processado APÓS sucesso
+                    $this->cache->put($processedEventCacheKey, true, self::PROCESSED_EVENT_TTL);
+                }
             } catch (Throwable $e) {
                 Log::error(
                     'Erro ao atualizar read model do ticket',

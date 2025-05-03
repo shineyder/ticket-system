@@ -21,6 +21,9 @@ services:
        interval: 10s
        timeout: 5s
        retries: 3
+    deploy:
+       # Usa a variável do .env para definir o número de réplicas
+       replicas: ${APP_REPLICAS:-1}
     entrypoint: ["docker-entrypoint.sh"]
     command: php-fpm -F
     environment:
@@ -166,6 +169,9 @@ services:
         condition: service_healthy
       mongo:
         condition: service_healthy
+    deploy:
+       # Usa a variável do .env para definir o número de réplicas
+       replicas: ${WORKER_REPLICAS:-1}
     entrypoint: ["docker-entrypoint.sh"] # Executa o mesmo script de setup inicial que o 'app'
     command: >
           sh -c "

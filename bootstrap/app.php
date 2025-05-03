@@ -7,6 +7,7 @@ use App\Infrastructure\Persistence\Exceptions\PersistenceOperationFailedExceptio
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -21,7 +22,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        //
+        $middleware->api(TrimStrings::class);
+
+        // Adiciona o Rate Limiter
+        $middleware->api('throttle:60,1');
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // Mapeia exceções específicas para status HTTP e mensagens padrão

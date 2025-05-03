@@ -19,6 +19,7 @@ class TicketResolvedTest extends TestCase
 
         $this->assertSame($this->ticketId, $event->id);
         $this->assertInstanceOf(DateTimeImmutable::class, $event->getOccurredOn());
+        $this->assertNotNull($event->getEventId());
         // Check if occurredOn is within the time range of creation
         $this->assertGreaterThanOrEqual($before, $event->getOccurredOn());
         $this->assertLessThanOrEqual($after, $event->getOccurredOn());
@@ -31,6 +32,7 @@ class TicketResolvedTest extends TestCase
         $event = new TicketResolved($this->ticketId, $specificTime);
 
         $this->assertEquals($specificTime, $event->getOccurredOn());
+        $this->assertNotNull($event->getEventId());
     }
 
     /** @test */
@@ -47,5 +49,18 @@ class TicketResolvedTest extends TestCase
         $expectedPayload = [];
 
         $this->assertSame($expectedPayload, $event->toPayload());
+    }
+
+    /** @test */
+    public function it_accepts_a_specific_event_id(): void
+    {
+        $specificEventId = 'test-event-id-123';
+        $event = new TicketResolved(
+            $this->ticketId,
+            null,
+            $specificEventId
+        );
+
+        $this->assertSame($specificEventId, $event->getEventId());
     }
 }

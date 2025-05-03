@@ -83,7 +83,7 @@ class ResolveTicketHandlerTest extends TestCase
         $this->handler->handle($command);
 
         // Assert (implicit via Mockery expectations)
-        $this->assertTrue(true); // Indicate test passed if no exceptions
+        $this->assertTrue(true);
     }
 
     /** @test */

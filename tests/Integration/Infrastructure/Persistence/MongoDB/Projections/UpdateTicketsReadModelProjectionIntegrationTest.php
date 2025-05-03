@@ -19,9 +19,10 @@ use Illuminate\Support\Facades\Cache;
 
 class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
 {
-    private const DATEFORMAT = 'Y-m-d\TH:i:s.v';
+    private const DATE_FORMAT = 'Y-m-d\TH:i:s.v';
     private const ERROR_MESSAGE = "O listener UpdateTicketsReadModelProjection lançou uma exceção inesperada: ";
     private const CACHE_ERROR_MESSAGE = "Cache não foi setado corretamente antes do teste.";
+    private const IDEMPOTENCY_CACHE_PREFIX = 'processed_event:';
     private const CACHE_TEST_KEY = 'integration-test-cache-key';
     private const CACHE_TEST_TAG = CachingTicketReadRepository::CACHE_TAG; // Usar a mesma tag da projeção
 
@@ -58,13 +59,15 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
     {
         // Arrange
         $aggregateId = 'projection-create-1';
+        $eventId = 'event-proj-int-create-1';
         $createdAt = new DateTimeImmutable('2024-03-10T10:00:00Z');
         $event = new TicketCreated(
             $aggregateId,
             'Projection Create Title',
             'Desc projection create',
             Priority::HIGH,
-            $createdAt
+            $createdAt,
+            $eventId
         );
         $appEvent = new DomainEventsPersisted([$event], $aggregateId, 'Ticket');
 
@@ -93,10 +96,10 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
         $this->assertSame(Status::OPEN, $dbData['status']);
         $this->assertInstanceOf(UTCDateTime::class, $dbData['created_at']);
         $this->assertEquals(
-            $createdAt->format(self::DATEFORMAT),
+            $createdAt->format(self::DATE_FORMAT),
             $dbData['created_at']->toDateTimeImmutable()
                 ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
-                ->format(self::DATEFORMAT)
+                ->format(self::DATE_FORMAT)
         );
         $this->assertNull($dbData['resolved_at']);
         $this->assertInstanceOf(UTCDateTime::class, $dbData['last_updated_at']);
@@ -113,8 +116,16 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
     {
         // Arrange: Primeiro, cria o estado inicial disparando TicketCreated
         $aggregateId = 'projection-resolve-1';
+        $createdEventId = 'event-proj-int-resolve-c1';
         $createdAt = new DateTimeImmutable('2024-03-10T11:00:00Z');
-        $createdEvent = new TicketCreated($aggregateId, 'To Be Resolved', 'Desc resolve', Priority::LOW, $createdAt);
+        $createdEvent = new TicketCreated(
+            $aggregateId,
+            'To Be Resolved',
+            'Desc resolve',
+            Priority::LOW,
+            $createdAt,
+            $createdEventId
+        );
         $createdAppEvent = new DomainEventsPersisted([$createdEvent], $aggregateId, 'Ticket');
         $this->dispatcher->dispatch($createdAppEvent); // Cria o documento inicial
 
@@ -147,17 +158,17 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
         $this->assertSame(Status::RESOLVED, $dbData['status']); // Status atualizado
         $this->assertInstanceOf(UTCDateTime::class, $dbData['resolved_at']);
         $this->assertEquals(
-            $resolvedAt->format(self::DATEFORMAT),
+            $resolvedAt->format(self::DATE_FORMAT),
             $dbData['resolved_at']->toDateTimeImmutable()
                 ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
-                ->format(self::DATEFORMAT)
+                ->format(self::DATE_FORMAT)
         );
         // Verifica se created_at não mudou
         $this->assertEquals(
-            $createdAt->format(self::DATEFORMAT),
+            $createdAt->format(self::DATE_FORMAT),
             $dbData['created_at']->toDateTimeImmutable()
                 ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
-                ->format(self::DATEFORMAT)
+                ->format(self::DATE_FORMAT)
         );
 
         // Assert: Verifica se o cache foi invalidado
@@ -172,10 +183,23 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
     {
         // Arrange
         $aggregateId = 'projection-multi-1';
+        $eventId1 = 'event-proj-int-multi-1';
+        $eventId2 = 'event-proj-int-multi-2';
         $createdAt = new DateTimeImmutable('2024-03-10T12:00:00Z');
         $resolvedAt = $createdAt->modify('+1 hour');
-        $createdEvent = new TicketCreated($aggregateId, 'Multi Event Proj', 'Desc multi', Priority::MEDIUM, $createdAt);
-        $resolvedEvent = new TicketResolved($aggregateId, $resolvedAt);
+        $createdEvent = new TicketCreated(
+            $aggregateId,
+            'Multi Event Proj',
+            'Desc multi',
+            Priority::MEDIUM,
+            $createdAt,
+            $eventId1
+        );
+        $resolvedEvent = new TicketResolved(
+            $aggregateId,
+            $resolvedAt,
+            $eventId2
+        );
         // Evento com ambos os eventos
         $appEvent = new DomainEventsPersisted([$createdEvent, $resolvedEvent], $aggregateId, 'Ticket');
 
@@ -202,16 +226,16 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
         $this->assertSame('medium', $dbData['priority']);
         $this->assertSame(Status::RESOLVED, $dbData['status']); // Estado final deve ser resolvido
         $this->assertEquals(
-            $createdAt->format(self::DATEFORMAT),
+            $createdAt->format(self::DATE_FORMAT),
             $dbData['created_at']->toDateTimeImmutable()
                 ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
-                ->format(self::DATEFORMAT)
+                ->format(self::DATE_FORMAT)
         );
         $this->assertEquals(
-            $resolvedAt->format(self::DATEFORMAT),
+            $resolvedAt->format(self::DATE_FORMAT),
             $dbData['resolved_at']->toDateTimeImmutable()
                 ->setTimezone(new \DateTimeZone(date_default_timezone_get()))
-                ->format(self::DATEFORMAT)
+                ->format(self::DATE_FORMAT)
         );
 
         // Assert: Verifica se o cache foi invalidado
@@ -251,6 +275,61 @@ class UpdateTicketsReadModelProjectionIntegrationTest extends TestCase
         $this->assertTrue(
             Cache::tags(self::CACHE_TEST_TAG)->has(self::CACHE_TEST_KEY),
             "Cache foi invalidado indevidamente para tipo de agregado diferente."
+        );
+    }
+
+    /** @test */
+    public function it_handles_duplicate_event_dispatch_idempotently(): void
+    {
+        // Arrange
+        $aggregateId = 'projection-idempotency-1';
+        $eventId = 'event-proj-idem-1';
+        $createdAt = new DateTimeImmutable('2024-03-10T15:00:00Z');
+        $event = new TicketCreated(
+            $aggregateId,
+            'Idempotency Proj Test',
+            'Desc idempotency proj',
+            Priority::LOW,
+            $createdAt,
+            $eventId
+        );
+
+        $appEvent = new DomainEventsPersisted([$event], $aggregateId, 'Ticket');
+
+        $idempotencyCacheKey = self::IDEMPOTENCY_CACHE_PREFIX . $eventId;
+
+        // Act: First dispatch
+        try {
+            $this->dispatcher->dispatch($appEvent);
+        } catch (Throwable $e) {
+            $this->fail("Primeira execução do listener falhou: " . $e->getMessage());
+        }
+
+        // Assert: Check DB state after first run
+        $dbDataAfterFirstRun = $this->findReadModelInDb($aggregateId);
+        $this->assertNotNull($dbDataAfterFirstRun, "Documento não encontrado após primeira execução.");
+        $this->assertSame(Status::OPEN, $dbDataAfterFirstRun['status']);
+        $this->assertInstanceOf(UTCDateTime::class, $dbDataAfterFirstRun['last_updated_at']);
+        $lastUpdateAfterFirst = $dbDataAfterFirstRun['last_updated_at']->toDateTimeImmutable();
+
+        // Assert: Check idempotency cache key exists
+        $this->assertTrue(Cache::has($idempotencyCacheKey), "Chave de idempotência não encontrada no cache após primeira execução.");
+
+        // Act: Second dispatch (same event)
+        sleep(1);
+        try {
+            $this->dispatcher->dispatch($appEvent);
+        } catch (Throwable $e) {
+            $this->fail("Segunda execução do listener (idempotência) falhou inesperadamente: " . $e->getMessage());
+        }
+
+        // Assert: Check DB state again - last_updated_at NÃO deve ter mudado
+        $dbDataAfterSecondRun = $this->findReadModelInDb($aggregateId);
+        $this->assertNotNull($dbDataAfterSecondRun);
+        $this->assertEquals(
+            $lastUpdateAfterFirst,
+            $dbDataAfterSecondRun['last_updated_at']->toDateTimeImmutable(),
+            "last_updated_at foi modificado na segunda execução (falha na idempotência)."
         );
     }
 }

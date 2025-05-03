@@ -5,15 +5,43 @@ namespace App\Infrastructure\Messaging\Kafka\Listeners;
 use App\Application\Events\DomainEventsPersisted;
 use App\Domain\Events\DomainEvent;
 use DateTime;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Junges\Kafka\Facades\Kafka;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Cache\CacheManager;
 use Throwable;
 
 /**
  * Listener que ouve por DomainEventsPersisted e publica os eventos no Kafka.
+ * Implementa ShouldQueue para processamento assíncrono e resiliência.
  */
-class PublishDomainEventsToKafka
+class PublishDomainEventsToKafka implements ShouldQueue
 {
+    private const PROCESSED_EVENT_CACHE_PREFIX = 'processed_event_kafka:';
+    private const PROCESSED_EVENT_TTL = 900; // 15 minutos
+    /**
+     * O número máximo de vezes que o job pode ser tentado.
+     */
+    public int $tries = 5;
+
+    /**
+     * O número máximo de exceções permitidas antes de falhar.
+     */
+    public int $maxExceptions = 3;
+
+    /**
+     * Calcula o número de segundos de espera antes de tentar o job novamente (backoff exponencial).
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [10, 30, 60, 120]; // Ex: 10s, 30s, 1m, 2m
+    }
+
+    public function __construct(
+        private readonly CacheManager $cache
+    ) {}
+
     /**
      * Manipula o evento DomainEventsPersisted.
      *
@@ -36,6 +64,18 @@ class PublishDomainEventsToKafka
         }
 
         foreach ($event->domainEvents as $domainEvent) {
+            $eventId = $domainEvent->getEventId();
+            $processedEventCacheKey = self::PROCESSED_EVENT_CACHE_PREFIX . $eventId;
+
+            // Verificar Idempotência
+            if ($this->cache->has($processedEventCacheKey)) {
+                Log::debug('Evento já processado, pulando (idempotência).', [
+                    'eventId' => $eventId,
+                    'eventType' => get_class($domainEvent)
+                ]);
+                continue; // Pula para o próximo evento
+            }
+
             try {
                 // Prepara o payload serializando as propriedades do evento
                 $payloadArray = $this->serializeEventPayload($domainEvent);
@@ -78,6 +118,8 @@ class PublishDomainEventsToKafka
                     ]
                 );
 
+                // Marcar como processado APÓS sucesso
+                $this->cache->put($processedEventCacheKey, true, self::PROCESSED_EVENT_TTL);
             } catch (Throwable $e) {
                 // Loga qualquer erro durante a publicação no Kafka
                 Log::error(

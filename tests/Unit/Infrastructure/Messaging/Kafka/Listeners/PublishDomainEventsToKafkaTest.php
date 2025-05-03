@@ -7,8 +7,10 @@ use App\Domain\Events\TicketCreated;
 use App\Domain\Events\TicketResolved;
 use App\Infrastructure\Messaging\Kafka\Listeners\PublishDomainEventsToKafka;
 use DateTimeImmutable;
+use Illuminate\Cache\CacheManager;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Junges\Kafka\Contracts\MessageProducer;
 use Junges\Kafka\Facades\Kafka;
 use Mockery;
@@ -19,17 +21,21 @@ class PublishDomainEventsToKafkaTest extends TestCase
 {
     use MockeryPHPUnitIntegration;
 
+    private const EVENT_KAFKA_PATTERN = '/^processed_event_kafka:';
+    private Mockery\MockInterface|CacheManager $mockCacheManager;
     private PublishDomainEventsToKafka $listener;
     private string $testTopic = 'test-ticket-events';
     private string $testBroker = 'test-broker';
 
     protected function setUp(): void
     {
-        parent::setUp(); // Importante para inicializar o ambiente Laravel/Facades
+        parent::setUp();
+
+        $this->mockCacheManager = Mockery::mock(CacheManager::class);
 
         Log::shouldReceive('debug')->zeroOrMoreTimes();
 
-        $this->listener = $this->app->make(PublishDomainEventsToKafka::class); // Resolve via container
+        $this->listener = new PublishDomainEventsToKafka($this->mockCacheManager);
     }
 
     /** @test */
@@ -38,14 +44,18 @@ class PublishDomainEventsToKafkaTest extends TestCase
         // Arrange
         $aggregateId = 'kafka-test-123';
         $occurredOn = new DateTimeImmutable('2024-01-15T10:00:00+00:00');
+        $eventId1 = 'event-id-1';
         $event1 = new TicketCreated(
             $aggregateId,
             'Kafka Title',
             'Kafka Desc',
             1, // Priority::MEDIUM
-            $occurredOn
+            $occurredOn,
+            $eventId1
         );
-        $event2 = new TicketResolved($aggregateId, $occurredOn->modify('+1 hour'));
+
+        $eventId2 = 'event-id-2';
+        $event2 = new TicketResolved($aggregateId, $occurredOn->modify('+1 hour'), $eventId2);
 
         $appEvent = new DomainEventsPersisted([$event1, $event2], $aggregateId, 'Ticket');
 
@@ -62,6 +72,17 @@ class PublishDomainEventsToKafkaTest extends TestCase
             ->times(2) // Uma vez para cada evento
             ->with($this->testBroker)
             ->andReturn($mockProducerBuilder);
+
+        // Mock Cache checks for idempotency (assume not processed yet)
+        $this->mockCacheManager->shouldReceive('has')
+            ->with(Mockery::pattern(self::EVENT_KAFKA_PATTERN.$eventId1.'/'))
+            ->once()
+            ->andReturnFalse();
+
+        $this->mockCacheManager->shouldReceive('has')
+            ->with(Mockery::pattern(self::EVENT_KAFKA_PATTERN.$eventId2.'/'))
+            ->once()
+            ->andReturnFalse();
 
         // Expect calls for Event 1 (TicketCreated)
         $mockProducerBuilder->shouldReceive('onTopic')
@@ -87,7 +108,15 @@ class PublishDomainEventsToKafkaTest extends TestCase
         $mockProducerBuilder->shouldReceive('withBodyKey')
             ->once()
             ->with('key', $aggregateId) // Verifica a chave da mensagem
-            ->andReturnSelf();
+            ->andReturnSelf()
+            ->ordered();
+
+        // Mock Cache put AFTER send for event 1
+        $this->mockCacheManager->shouldReceive('put')
+            ->with(Mockery::pattern(self::EVENT_KAFKA_PATTERN.$eventId1.'/'), true, Mockery::any()) // Verifica chave e valor
+            ->once()
+            ->ordered();
+
         $mockProducerBuilder->shouldReceive('send')->once();
 
         // Expect calls for Event 2 (TicketResolved)
@@ -111,13 +140,59 @@ class PublishDomainEventsToKafkaTest extends TestCase
         $mockProducerBuilder->shouldReceive('withBodyKey')
             ->once()
             ->with('key', $aggregateId) // Verifica a chave da mensagem
-            ->andReturnSelf();
+            ->andReturnSelf()
+            ->ordered();
+
+        // Mock Cache put AFTER send for event 2
+        $this->mockCacheManager->shouldReceive('put')
+            ->with(Mockery::pattern(self::EVENT_KAFKA_PATTERN.$eventId2.'/'), true, Mockery::any()) // Verifica chave e valor
+            ->once()
+            ->ordered();
+
         $mockProducerBuilder->shouldReceive('send')->once();
 
         // Act
         $this->listener->handle($appEvent);
 
         // Assert (implicit via Mockery expectations)
+        $this->assertTrue(true);
+    }
+
+    /** @test */
+    public function it_skips_publishing_if_event_already_processed_in_cache(): void
+    {
+        // Arrange
+        $aggregateId = 'kafka-skip-456';
+        $eventId = 'event-skip-id';
+
+        $event = new TicketCreated($aggregateId, 'Skip Title', 'Skip Desc', 0, null, $eventId);
+
+        $appEvent = new DomainEventsPersisted([$event], $aggregateId, 'Ticket');
+
+        Config::shouldReceive('get')
+            ->with('kafka.topics.ticket-events.topic', null)
+            ->andReturn($this->testTopic);
+
+        Config::shouldReceive('get')
+            ->with('kafka.topics.ticket-events.broker', null)
+            ->andReturn($this->testBroker);
+
+        // Mock Cache check - Event IS already processed
+        $this->mockCacheManager->shouldReceive('has')
+            ->with(Mockery::pattern(self::EVENT_KAFKA_PATTERN.$eventId.'/'))
+            ->once()
+            ->andReturnTrue();
+
+        // Assert that Kafka::publish is NEVER called
+        Kafka::shouldReceive('publish')->never();
+
+        // Assert that cache->put is NEVER called
+        $this->mockCacheManager->shouldReceive('put')->never();
+
+        // Act
+        $this->listener->handle($appEvent);
+
+        // Assert (implicit)
         $this->assertTrue(true);
     }
 
@@ -141,6 +216,7 @@ class PublishDomainEventsToKafkaTest extends TestCase
         $this->listener->handle($appEvent);
 
         // Assert (implicit)
+        $this->assertTrue(true);
     }
 
     /** @test */
@@ -164,6 +240,7 @@ class PublishDomainEventsToKafkaTest extends TestCase
         $this->listener->handle($appEvent);
 
         // Assert (implicit)
+        $this->assertTrue(true);
     }
 
     /** @test */
@@ -171,7 +248,15 @@ class PublishDomainEventsToKafkaTest extends TestCase
     {
         // Arrange
         $aggregateId = 'kafka-fail-456';
-        $event = new TicketCreated($aggregateId, 'Fail Title', 'Fail Desc', 0);
+        $eventId = 'event-fail-id-' . Str::uuid()->toString();
+        $event = new TicketCreated(
+            $aggregateId,
+            'Fail Title',
+            'Fail Desc',
+            0,
+            null,
+            $eventId
+        );
         $appEvent = new DomainEventsPersisted([$event], $aggregateId, 'Ticket');
         $exception = new \Exception('Kafka connection failed');
 
@@ -183,6 +268,12 @@ class PublishDomainEventsToKafkaTest extends TestCase
             ->with('kafka.topics.ticket-events.broker', null)
             ->once()
             ->andReturn($this->testBroker);
+
+        // Espera-se que retorne false para que a publicação seja tentada
+        $this->mockCacheManager->shouldReceive('has')
+            ->with(Mockery::pattern(self::EVENT_KAFKA_PATTERN.$eventId.'/'))
+            ->once()
+            ->andReturnFalse();
 
         $mockProducerBuilder = Mockery::mock(MessageProducer::class);
         Kafka::shouldReceive('publish')
@@ -207,9 +298,13 @@ class PublishDomainEventsToKafkaTest extends TestCase
                 })
             );
 
+        // Garante que cache->put() não seja chamado se a publicação falhar antes
+        $this->mockCacheManager->shouldReceive('put')->never();
+
         // Act
         $this->listener->handle($appEvent);
 
         // Assert (implicit)
+        $this->assertTrue(true);
     }
 }
