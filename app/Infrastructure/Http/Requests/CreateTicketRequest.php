@@ -5,7 +5,18 @@ namespace App\Infrastructure\Http\Requests;
 use App\Domain\ValueObjects\Priority;
 use Illuminate\Validation\Rule;
 use Illuminate\Foundation\Http\FormRequest;
+use OpenApi\Attributes as OA;
 
+#[OA\Schema(
+    schema: "CreateTicketRequest",
+    title: "Create Ticket Request Body",
+    required: ["title", "description"],
+    properties: [
+        new OA\Property(property: "title", type: "string", maxLength: 50, example: "Corrigir bug na API"),
+        new OA\Property(property: "description", type: "string", maxLength: 255, example: "O endpoint /ticket está retornando 500."),
+        new OA\Property(property: "priority", type: "string", enum: ['low','medium','high'], default: Priority::LOW, example: "medium")
+    ]
+)]
 class CreateTicketRequest extends FormRequest
 {
     /**

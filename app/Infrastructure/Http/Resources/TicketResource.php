@@ -6,11 +6,36 @@ use App\Application\DTOs\TicketDTO;
 use App\Domain\ValueObjects\Status;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use DateTimeImmutable;
+use OpenApi\Attributes as OA;
 
 /**
  * @mixin TicketDTO
  */
+#[OA\Schema(
+    schema: "TicketResource",
+    title: "Ticket Resource",
+    description: "Representação de um ticket na API",
+    properties: [
+        new OA\Property(property: "id", type: "string", format: "uuid"),
+        new OA\Property(property: "title", type: "string"),
+        new OA\Property(property: "description", type: "string"),
+        new OA\Property(property: "priority", type: "string", enum: ['low','medium','high']),
+        new OA\Property(property: "status", type: "string", enum: ['open','resolved']),
+        new OA\Property(property: "createdAt", type: "string", format: "date-time"),
+        new OA\Property(property: "resolvedAt", type: "string", format: "date-time", nullable: true),
+        new OA\Property(property: "_links", ref: "#/components/schemas/TicketLinks")
+    ]
+)]
+#[OA\Schema(
+    schema: "TicketLinks",
+    title: "Ticket HATEOAS Links",
+    properties: [
+        new OA\Property(property: "self", type: "object", properties: [new OA\Property(property: "href", type: "string", format: "url")]),
+        new OA\Property(property: "collection", type: "object", properties: [new OA\Property(property: "href", type: "string", format: "url")]),
+        new OA\Property(property: "resolve", type: "object", nullable: true, properties: [new OA\Property(property: "href", type: "string", format: "url"), new OA\Property(property: "method", type: "string", example: "PUT")])
+    ],
+    description: "Links HATEOAS relacionados a um ticket. O link 'resolve' só aparece para tickets abertos."
+)]
 class TicketResource extends JsonResource
 {
     /**

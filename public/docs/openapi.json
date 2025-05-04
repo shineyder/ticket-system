@@ -1,0 +1,366 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Ticket System API",
+        "description": "API para gerenciamento de tickets usando DDD, CQRS, ES com Laravel e MongoDB.",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "/api/v1",
+            "description": "Servidor Principal"
+        }
+    ],
+    "paths": {
+        "/ticket": {
+            "get": {
+                "tags": [
+                    "Tickets"
+                ],
+                "summary": "Lista todos os tickets",
+                "description": "Retorna uma lista paginada ou completa de tickets, com opções de ordenação.",
+                "operationId": "6153b96a956625ebfd7583025b414766",
+                "parameters": [
+                    {
+                        "name": "orderBy",
+                        "in": "query",
+                        "description": "Campo para ordenação (ex: createdAt, priority)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "default": "createdAt"
+                        }
+                    },
+                    {
+                        "name": "orderDirection",
+                        "in": "query",
+                        "description": "Direção da ordenação",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "default": "desc",
+                            "enum": [
+                                "asc",
+                                "desc"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Lista de tickets",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/TicketResource"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Erro de validação nos parâmetros de query",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Tickets"
+                ],
+                "summary": "Cria um novo ticket",
+                "description": "Registra um novo ticket no sistema. A prioridade padrão é 'low'.",
+                "operationId": "4c0d81f4bccc730810ef48af521d7818",
+                "requestBody": {
+                    "description": "Dados necessários para criar o ticket",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateTicketRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Ticket criado com sucesso",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ticket criado!"
+                                        },
+                                        "ticket_id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                            "example": "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+                                        },
+                                        "_links": {
+                                            "$ref": "#/components/schemas/TicketLinks"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Erro de validação",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/ticket/{id}": {
+            "get": {
+                "tags": [
+                    "Tickets"
+                ],
+                "summary": "Busca um ticket pelo ID",
+                "description": "Retorna os detalhes de um ticket específico.",
+                "operationId": "d83a0ac2385182cb9462147c050e3351",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID do ticket a ser buscado",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Detalhes do ticket",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TicketResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Ticket não encontrado"
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "Tickets"
+                ],
+                "summary": "Resolve um ticket existente",
+                "description": "Marca um ticket como resolvido com base no seu ID.",
+                "operationId": "d7690ab291ecfb4e1c53e81a7e435738",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID do ticket a ser resolvido",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Ticket resolvido com sucesso",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Ticket resolvido!"
+                                        },
+                                        "_links": {
+                                            "$ref": "#/components/schemas/TicketLinks"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Ticket não encontrado"
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "ValidationError": {
+                "title": "Validation Error",
+                "description": "Estrutura de resposta para erros de validação retornados pela API (geralmente status 422).",
+                "properties": {
+                    "message": {
+                        "description": "Mensagem geral indicando que a validação falhou.",
+                        "type": "string",
+                        "example": "The given data was invalid."
+                    },
+                    "errors": {
+                        "description": "Um objeto onde cada chave é o nome do campo que falhou na validação e o valor é um array de strings contendo as mensagens de erro para aquele campo.",
+                        "type": "object",
+                        "example": {
+                            "title": [
+                                "The title field is required."
+                            ],
+                            "priority": [
+                                "The selected priority is invalid."
+                            ]
+                        },
+                        "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "type": "object"
+            },
+            "CreateTicketRequest": {
+                "title": "Create Ticket Request Body",
+                "required": [
+                    "title",
+                    "description"
+                ],
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 50,
+                        "example": "Corrigir bug na API"
+                    },
+                    "description": {
+                        "type": "string",
+                        "maxLength": 255,
+                        "example": "O endpoint /ticket está retornando 500."
+                    },
+                    "priority": {
+                        "type": "string",
+                        "default": 0,
+                        "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                        ],
+                        "example": "medium"
+                    }
+                },
+                "type": "object"
+            },
+            "TicketResource": {
+                "title": "Ticket Resource",
+                "description": "Representação de um ticket na API",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "priority": {
+                        "type": "string",
+                        "enum": [
+                            "low",
+                            "medium",
+                            "high"
+                        ]
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "open",
+                            "resolved"
+                        ]
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "resolvedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "_links": {
+                        "$ref": "#/components/schemas/TicketLinks"
+                    }
+                },
+                "type": "object"
+            },
+            "TicketLinks": {
+                "title": "Ticket HATEOAS Links",
+                "description": "Links HATEOAS relacionados a um ticket. O link 'resolve' só aparece para tickets abertos.",
+                "properties": {
+                    "self": {
+                        "properties": {
+                            "href": {
+                                "type": "string",
+                                "format": "url"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "collection": {
+                        "properties": {
+                            "href": {
+                                "type": "string",
+                                "format": "url"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "resolve": {
+                        "properties": {
+                            "href": {
+                                "type": "string",
+                                "format": "url"
+                            },
+                            "method": {
+                                "type": "string",
+                                "example": "PUT"
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Tickets",
+            "description": "Tickets"
+        }
+    ]
+}
