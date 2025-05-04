@@ -19,11 +19,11 @@ COPY --from=builder /usr/bin/composer /usr/local/bin/composer
 
 # Install xdebug using PECL
 RUN pecl install -o -f xdebug \
-    && docker-php-ext-enable xdebug \
     && apt-get update -qq && apt-get install -y git librdkafka-dev librdkafka1 libssl-dev libzip-dev unzip \
     && docker-php-ext-install pdo pdo_mysql zip \
     && pecl install -o -f mongodb rdkafka \
-    && docker-php-ext-enable mongodb rdkafka \
+    && docker-php-ext-enable xdebug mongodb rdkafka \
+    && echo "xdebug.mode=coverage" > /usr/local/etc/php/conf.d/zz-xdebug-mode.ini \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*

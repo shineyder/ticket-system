@@ -1,0 +1,39 @@
+{
+    /*
+    Comando para rodar o infection no container do docker:
+    docker-compose exec app sh -c " \
+        echo 'Setting environment for Infection...' && \
+        export APP_ENV=testing && \
+        export QUEUE_CONNECTION=sync && \
+        echo 'Clearing config cache...' && \
+        php artisan config:clear && \
+        echo 'Running Infection...' && \
+        vendor/bin/infection --min-msi=80 --min-covered-msi=90 \
+    "
+    */
+    "$schema": "vendor/infection/infection/resources/schema.json",
+    "timeout": 30, // Tempo limite em segundos
+    "source": {
+        "directories": [
+            "app"
+        ],
+        "excludes": [
+            "Infrastructure/Http/Requests", // Geralmente testado via Feature tests
+            "Infrastructure/Http/Resources", // Geralmente testado via Feature tests
+            "Infrastructure/Http/OpenApi",
+            "Infrastructure/Providers"
+        ]
+    },
+    "phpUnit": {
+        "configDir": ".", // Diretório onde está o phpunit.xml
+        "customPath": "vendor/bin/phpunit", // Caminho para o executável do PHPUnit
+    },
+    "logs": {
+        "text": "public/reports/infection.log", // Log de texto
+        "summary": "public/reports/infection-summary.log", // Sumário
+        "html": "public/reports/infection.html" // Relatório HTML interativo
+    },
+    "mutators": {
+        "@default": true // Usar o conjunto padrão de mutadores
+    }
+}

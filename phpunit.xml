@@ -19,6 +19,10 @@
         <include>
             <directory>app</directory>
         </include>
+        <exclude>
+            <directory>app/Infrastructure/Http/OpenApi</directory>
+            <directory>app/Infrastructure/Providers</directory>
+        </exclude>
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
