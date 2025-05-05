@@ -141,6 +141,8 @@ class ResolveTicketHandlerTest extends TestCase
 
         // Assert
         $this->expectException(AggregateNotFoundException::class);
+        $this->expectExceptionMessage('Ticket com ID ' . $ticketId . ' não encontrado.');
+        $this->expectExceptionCode(0);
 
         // Act
         $this->handler->handle($command);
@@ -174,6 +176,7 @@ class ResolveTicketHandlerTest extends TestCase
         // Assert
         $this->expectException(InvalidTicketStateException::class);
         $this->expectExceptionMessage("Ticket already resolved");
+        $this->expectExceptionCode(0);
 
         // Act
         $this->handler->handle($command);

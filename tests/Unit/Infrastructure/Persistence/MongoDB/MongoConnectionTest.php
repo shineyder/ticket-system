@@ -133,6 +133,8 @@ class MongoConnectionTest extends TestCase
 
         // Assert
         $this->expectException(MongoConnectionException::class);
+        $this->expectExceptionMessage('Erro ao conectar ao banco de dados MongoDB: Falha ao registrar MongoConnection: Erro ao conectar ao banco de dados MongoDB: Failed to parse MongoDB URI: \'mongodb://invalid-host-format:::27017\'. Invalid host string in URI.');
+        $this->expectExceptionCode(0);
 
         // Act: Resolve via container, o que chama o construtor
         $this->app->make(MongoConnection::class);

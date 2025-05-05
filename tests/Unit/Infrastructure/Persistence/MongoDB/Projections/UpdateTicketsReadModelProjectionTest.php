@@ -28,6 +28,7 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
     private Mockery\MockInterface|CacheManager $mockCacheManager;
 
     private const CACHE_PREFIX = 'processed_event:';
+    private const LOG_DEBUG_MESSAGE = 'Cache de listagem de tickets invalidado.';
 
     protected function setUp(): void
     {
@@ -103,6 +104,14 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
         $mockTaggedCache->shouldReceive('flush')
             ->once();
 
+        // Espera o log de debug da invalidação do cache
+        Log::shouldReceive('debug')
+            ->once()
+            ->with(
+                self::LOG_DEBUG_MESSAGE,
+                ['tag' => CachingTicketReadRepository::CACHE_TAG]
+            );
+
         // Act
         $this->projection->handle($appEvent);
 
@@ -177,6 +186,14 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
             ->andReturn($mockTaggedCache);
         $mockTaggedCache->shouldReceive('flush')
             ->once();
+
+        // Espera o log de debug da invalidação do cache
+        Log::shouldReceive('debug')
+            ->once()
+            ->with(
+                self::LOG_DEBUG_MESSAGE,
+                ['tag' => CachingTicketReadRepository::CACHE_TAG]
+            );
 
         // Act
         $this->projection->handle($appEvent);
@@ -305,6 +322,14 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
         $mockTaggedCache->shouldReceive('flush')
             ->once();
 
+        // Espera o log de debug da invalidação do cache (apenas uma vez no final)
+        Log::shouldReceive('debug')
+            ->once()
+            ->with(
+                self::LOG_DEBUG_MESSAGE,
+                ['tag' => CachingTicketReadRepository::CACHE_TAG]
+            );
+
         // Act
         $this->projection->handle($appEvent);
 
@@ -394,6 +419,17 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
             ->with(self::CACHE_PREFIX . $eventId)
             ->once()
             ->andReturnTrue();
+
+        // Espera o log de debug da idempotência
+        Log::shouldReceive('debug')
+            ->once()
+            ->with(
+                'Evento já processado, pulando (idempotência).',
+                Mockery::on(function ($context) use ($eventId, $event) {
+                    return $context['eventId'] === $eventId &&
+                           $context['eventType'] === get_class($event);
+                })
+            );
 
         // Assert: Nenhum método do repositório deve ser chamado
         $this->mockReadRepository->shouldNotReceive('findById');

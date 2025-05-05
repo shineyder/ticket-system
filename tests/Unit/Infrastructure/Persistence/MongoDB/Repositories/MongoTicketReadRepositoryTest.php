@@ -52,6 +52,7 @@ class MongoTicketReadRepositoryTest extends TestCase
         // Assert
         $this->expectException(PersistenceOperationFailedException::class);
         $this->expectExceptionMessage('Erro ao salvar read model do ticket com ID id1: Update failed');
+        $this->expectExceptionCode(0);
 
         // Act
         $this->repository->save($dto);
@@ -72,6 +73,7 @@ class MongoTicketReadRepositoryTest extends TestCase
         // Assert
         $this->expectException(PersistenceOperationFailedException::class);
         $this->expectExceptionMessage('Erro ao buscar read model do ticket com ID find-fail-id: Find failed');
+        $this->expectExceptionCode(0);
 
         // Act
         $this->repository->findById($ticketId);
@@ -91,7 +93,7 @@ class MongoTicketReadRepositoryTest extends TestCase
         // Assert
         $this->expectException(PersistenceOperationFailedException::class);
         $this->expectExceptionMessage('Erro ao buscar todos os read models de tickets: Find failed');
-
+        $this->expectExceptionCode(0);
 
         // Act
         $this->repository->findAll();

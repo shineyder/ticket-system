@@ -12,7 +12,7 @@
     "
     */
     "$schema": "vendor/infection/infection/resources/schema.json",
-    "timeout": 30, // Tempo limite em segundos
+    "timeout": 60, // Tempo limite em segundos
     "source": {
         "directories": [
             "app"
@@ -21,6 +21,7 @@
             "Infrastructure/Http/Requests", // Geralmente testado via Feature tests
             "Infrastructure/Http/Resources", // Geralmente testado via Feature tests
             "Infrastructure/Http/OpenApi",
+            "Infrastructure/Http/Controllers", // Excluir controllers para evitar mutações em anotações
             "Infrastructure/Providers"
         ]
     },

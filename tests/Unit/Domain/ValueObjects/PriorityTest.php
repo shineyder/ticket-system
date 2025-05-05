@@ -25,6 +25,7 @@ class PriorityTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage("Prioridade inválida: 5");
+        $this->expectExceptionCode(0);
 
         new Priority(5);//NOSONAR
     }
@@ -46,6 +47,7 @@ class PriorityTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage("Prioridade inválida: urgent");
+        $this->expectExceptionCode(0);
 
         Priority::fromString('urgent');
     }

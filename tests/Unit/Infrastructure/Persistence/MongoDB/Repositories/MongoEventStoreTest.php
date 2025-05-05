@@ -67,6 +67,8 @@ class MongoEventStoreTest extends TestCase
 
         // Assert
         $this->expectException(AggregateNotFoundException::class);
+        $this->expectExceptionMessage('Ticket com ID ' . $aggregateId . ' não encontrado.');
+        $this->expectExceptionCode(0);
 
         // Act
         $this->eventStore->load($aggregateId);
@@ -95,6 +97,8 @@ class MongoEventStoreTest extends TestCase
 
         // Assert
         $this->expectException(EventLoadFailedException::class);
+        $this->expectExceptionMessage('Falha ao carregar agregado ' . $aggregateId . ': Cursor error');
+        $this->expectExceptionCode(0);
 
         // Act
         $this->eventStore->load($aggregateId);
@@ -131,6 +135,7 @@ class MongoEventStoreTest extends TestCase
         // Assert
         $this->expectException(EventInstantiateFailedException::class);
         $this->expectExceptionMessage('Falha ao instanciar evento App\Domain\Events\TicketCreated.');
+        $this->expectExceptionCode(0);
 
         // Act
         $this->eventStore->load($aggregateId);
@@ -166,6 +171,8 @@ class MongoEventStoreTest extends TestCase
 
         // Assert
         $this->expectException(EventClassNotFoundException::class);
+        $this->expectExceptionMessage('Falha ao salvar eventos para o agregado App\Domain\Events\NonExistentEvent.');
+        $this->expectExceptionCode(0);
 
         // Act
         $this->eventStore->load($aggregateId);
@@ -202,6 +209,8 @@ class MongoEventStoreTest extends TestCase
 
         // Assert
         $this->expectException(EventInstantiateFailedException::class);
+        $this->expectExceptionMessage('Falha ao instanciar evento App\Domain\Events\TicketCreated.');
+        $this->expectExceptionCode(0);
 
         // Act
         $this->eventStore->load($aggregateId);

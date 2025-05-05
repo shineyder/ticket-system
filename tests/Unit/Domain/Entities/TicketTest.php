@@ -112,6 +112,7 @@ class TicketTest extends TestCase
         // Expect Exception on Act
         $this->expectException(InvalidTicketStateException::class);
         $this->expectExceptionMessage("O ticket {$this->ticketId} não pode ser resolvido pois não está aberto.");
+        $this->expectExceptionCode(0);
 
         // Act
         $ticket->resolve();

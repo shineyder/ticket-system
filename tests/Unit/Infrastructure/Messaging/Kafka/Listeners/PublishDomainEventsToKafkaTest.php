@@ -34,8 +34,6 @@ class PublishDomainEventsToKafkaTest extends TestCase
 
         $this->mockCacheManager = Mockery::mock(CacheManager::class);
 
-        Log::shouldReceive('debug')->zeroOrMoreTimes();
-
         $this->listener = new PublishDomainEventsToKafka($this->mockCacheManager);
     }
 
@@ -120,6 +118,18 @@ class PublishDomainEventsToKafkaTest extends TestCase
 
         $mockProducerBuilder->shouldReceive('send')->once();
 
+        // Expect Log::debug for successful publish of event 1
+        Log::shouldReceive('debug')
+            ->once()
+            ->with(
+                'Evento publicado no Kafka',
+                Mockery::on(function ($context) use ($event1) {
+                    return $context['topic'] === $this->testTopic &&
+                           $context['event'] === get_class($event1) &&
+                           $context['aggregateId'] === $event1->getAggregateId();
+                })
+            )->ordered();
+
         // Expect calls for Event 2 (TicketResolved)
         $mockProducerBuilder->shouldReceive('onTopic')
             ->once()
@@ -152,6 +162,18 @@ class PublishDomainEventsToKafkaTest extends TestCase
 
         $mockProducerBuilder->shouldReceive('send')->once();
 
+        // Expect Log::debug for successful publish of event 2
+        Log::shouldReceive('debug')
+            ->once()
+            ->with(
+                'Evento publicado no Kafka',
+                Mockery::on(function ($context) use ($event2) {
+                    return $context['topic'] === $this->testTopic &&
+                           $context['event'] === get_class($event2) &&
+                           $context['aggregateId'] === $event2->getAggregateId();
+                })
+            )->ordered();
+
         // Act
         $this->listener->handle($appEvent);
 
@@ -183,6 +205,17 @@ class PublishDomainEventsToKafkaTest extends TestCase
             ->with(Mockery::pattern(self::EVENT_KAFKA_PATTERN.$eventId.'/'))
             ->once()
             ->andReturnTrue();
+
+        // Expect Log::debug for idempotency skip
+        Log::shouldReceive('debug')
+            ->once()
+            ->with(
+                'Evento já processado, pulando (idempotência).',
+                Mockery::on(function ($context) use ($eventId, $event) {
+                    return $context['eventId'] === $eventId &&
+                           $context['eventType'] === get_class($event);
+                })
+            );
 
         // Assert that Kafka::publish is NEVER called
         Kafka::shouldReceive('publish')->never();
@@ -287,6 +320,9 @@ class PublishDomainEventsToKafkaTest extends TestCase
         $mockProducerBuilder->shouldReceive('withBodyKey')->once()->andReturnSelf();
         $mockProducerBuilder->shouldReceive('send')->once()->andThrow($exception); // Simula falha
 
+        // Não esperamos Log::debug de sucesso aqui
+        Log::shouldReceive('debug')->never();
+
         Log::shouldReceive('error')
             ->once()
             ->with(
@@ -339,6 +375,9 @@ class PublishDomainEventsToKafkaTest extends TestCase
             ->with(Mockery::pattern(self::EVENT_KAFKA_PATTERN.$eventId.'/'))
             ->once()
             ->andReturnFalse();
+
+        // Não esperamos Log::debug de sucesso aqui
+        Log::shouldReceive('debug')->never();
 
         // Expect Log::error to be called due to json_encode failure
         Log::shouldReceive('error')

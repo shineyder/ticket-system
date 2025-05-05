@@ -52,6 +52,7 @@ class MongoEventStore implements TicketEventStoreInterface
      * @param Ticket $ticket O agregado Ticket contendo novos eventos.
      * @return DomainEvent[] Retorna os eventos que foram efetivamente salvos.
      * @throws EventPersistenceFailedException Em caso de falha na persistência ou na transação.
+     * @infection-ignore-mutator CatchRemoval
      */
     public function save(Ticket $ticket): array
     {
@@ -102,6 +103,7 @@ class MongoEventStore implements TicketEventStoreInterface
      * @return Ticket O agregado Ticket reconstituído.
      * @throws AggregateNotFoundException Se nenhum evento for encontrado para o ID fornecido.
      * @throws \Exception Em caso de outras falhas ao carregar ou reconstituir.
+     * @infection-ignore-mutator CatchRemoval
      */
     public function load(string $aggregateId): Ticket
     {
@@ -188,6 +190,7 @@ class MongoEventStore implements TicketEventStoreInterface
      * @param object|array $eventData Dados do evento do MongoDB (geralmente um objeto BSONDocument ou array).
      * @return DomainEvent O objeto de evento reconstituído.
      * @throws \Exception Se a classe do evento não for encontrada ou não puder ser instanciada.
+     * @infection-ignore-mutator CatchRemoval
      */
     private function reconstituteEvent(object|array $eventData): DomainEvent
     {

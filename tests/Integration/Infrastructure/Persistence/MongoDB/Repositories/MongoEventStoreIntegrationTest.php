@@ -242,6 +242,7 @@ class MongoEventStoreIntegrationTest extends TestCase
         // Assert
         $this->expectException(AggregateNotFoundException::class);
         $this->expectExceptionMessage("Ticket com ID non-existent-id não encontrado.");
+        $this->expectExceptionCode(0);
 
         // Act
         $this->eventStore->load('non-existent-id');
@@ -307,6 +308,7 @@ class MongoEventStoreIntegrationTest extends TestCase
         // Assert: Espera a exceção específica do Event Store
         $this->expectException(EventPersistenceFailedException::class);
         $this->expectExceptionMessage("Falha ao salvar eventos para o agregado tx-abort-test-1.");
+        $this->expectExceptionCode(0);
 
         // Act: Tenta salvar o ticket com o novo evento (Resolved)
         // A operação insertMany dentro do save() deve falhar devido ao mock

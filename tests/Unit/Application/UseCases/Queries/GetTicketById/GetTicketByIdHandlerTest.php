@@ -65,6 +65,7 @@ class GetTicketByIdHandlerTest extends TestCase
         // Assert
         $this->expectException(TicketNotFoundException::class);
         $this->expectExceptionMessage("Ticket com ID {$ticketId} não encontrado.");
+        $this->expectExceptionCode(0);
 
         // Act
         $this->handler->handle($query);

@@ -23,6 +23,7 @@ class StatusTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage("Status inválido: pending");
+        $this->expectExceptionCode(0);
 
         new Status('pending');//NOSONAR
     }
