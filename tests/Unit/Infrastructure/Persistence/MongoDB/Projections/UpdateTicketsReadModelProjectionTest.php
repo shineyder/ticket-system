@@ -167,7 +167,7 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
             ->with(self::CACHE_PREFIX . $eventId, true, Mockery::any())
             ->once()
             ->ordered();
-        
+
         // Espera que o cache seja invalidado
         $mockTaggedCache = Mockery::mock(\Illuminate\Cache\TaggedCache::class);
         $this->mockCacheManager
@@ -335,7 +335,7 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
             ->once()
             ->with($aggregateId)
             ->andReturnNull();
-        
+
         // Espera verificação de idempotência (retorna false)
         $this->mockCacheManager->shouldReceive('has')
             ->with(self::CACHE_PREFIX . $eventId)
@@ -350,7 +350,7 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
             ->andThrow($exception);
 
         $this->mockCacheManager->shouldNotReceive('put');
-        
+
         // Espera que o erro seja logado
         Log::shouldReceive('error')
             ->once()
@@ -404,6 +404,78 @@ class UpdateTicketsReadModelProjectionTest extends TestCase
 
         // Assert: Invalidação de tag também não deve ocorrer (pois não houve save)
         $this->mockCacheManager->shouldNotReceive('tags');
+
+        // Act
+        $this->projection->handle($appEvent);
+
+        // Assert (implicit)
+        $this->assertTrue(true);
+    }
+
+    /** @test */
+    public function it_logs_error_if_cache_invalidation_fails(): void
+    {
+        // Arrange
+        $aggregateId = 'proj-cache-fail-123';
+        $eventId = 'event-proj-cache-fail-1';
+        $event = new TicketCreated(
+            $aggregateId,
+            'Cache Fail Title',
+            'Desc',
+            Priority::LOW,
+            null,
+            $eventId
+        );
+        $appEvent = new DomainEventsPersisted([$event], $aggregateId, 'Ticket');
+        $exception = new \RuntimeException('Redis connection failed'); // Simulate cache error
+
+        // Expect findById (returns null for new ticket)
+        $this->mockReadRepository
+            ->shouldReceive('findById')
+            ->once()
+            ->with($aggregateId)
+            ->andReturnNull();
+
+        // Expect idempotency check (returns false)
+        $this->mockCacheManager->shouldReceive('has')
+            ->with(self::CACHE_PREFIX . $eventId)
+            ->once()
+            ->andReturnFalse();
+
+        // Expect save to succeed
+        $this->mockReadRepository
+            ->shouldReceive('save')
+            ->once()
+            ->with(Mockery::type(TicketDTO::class))
+            ->ordered(); // Save happens before cache invalidation
+
+        // Expect cache put for idempotency
+        $this->mockCacheManager->shouldReceive('put')
+            ->with(self::CACHE_PREFIX . $eventId, true, Mockery::any())
+            ->once()
+            ->ordered();
+
+        // Expect cache invalidation attempt, which will fail
+        $mockTaggedCache = Mockery::mock(\Illuminate\Cache\TaggedCache::class);
+        $this->mockCacheManager
+            ->shouldReceive('tags')
+            ->once()
+            ->with(CachingTicketReadRepository::CACHE_TAG)
+            ->andReturn($mockTaggedCache);
+        $mockTaggedCache->shouldReceive('flush') // This is the call that will fail
+            ->once()
+            ->andThrow($exception);
+
+        // Expect Log::error for the cache invalidation failure
+        Log::shouldReceive('error')
+            ->once()
+            ->with(
+                'Falha ao invalidar cache de tickets.',
+                Mockery::on(function ($context) use ($exception) {
+                    return $context['tag'] === CachingTicketReadRepository::CACHE_TAG &&
+                           $context['error'] === $exception->getMessage();
+                })
+            );
 
         // Act
         $this->projection->handle($appEvent);

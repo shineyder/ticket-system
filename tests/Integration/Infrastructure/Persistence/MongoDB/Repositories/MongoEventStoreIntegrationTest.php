@@ -9,10 +9,14 @@ use App\Domain\Exceptions\AggregateNotFoundException;
 use App\Domain\Interfaces\Repositories\TicketEventStoreInterface;
 use App\Domain\ValueObjects\Priority;
 use App\Domain\ValueObjects\Status;
+use App\Infrastructure\Persistence\Exceptions\EventPersistenceFailedException;
 use App\Infrastructure\Persistence\MongoDB\MongoConnection;
 use App\Infrastructure\Persistence\MongoDB\Repositories\MongoEventStore;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use MongoDB\BSON\UTCDateTime;
+use MongoDB\Collection;
+use MongoDB\Driver\Exception\BulkWriteException;
+use Mockery;
 use Tests\TestCase;
 
 class MongoEventStoreIntegrationTest extends TestCase
@@ -23,6 +27,7 @@ class MongoEventStoreIntegrationTest extends TestCase
     private TicketEventStoreInterface $eventStore;
     private string $collectionName = 'ticket_events'; // Nome da coleção
     private MongoConnection $mongoConnection;
+    private Collection $collection;
 
     protected function setUp(): void
     {
@@ -31,6 +36,8 @@ class MongoEventStoreIntegrationTest extends TestCase
         $this->eventStore = $this->app->make(TicketEventStoreInterface::class);
 
         $this->mongoConnection = $this->app->make(MongoConnection::class);
+        $this->collection = $this->mongoConnection->getDatabase()
+            ->selectCollection($this->collectionName);
 
         $this->assertInstanceOf(MongoEventStore::class, $this->eventStore);
     }
@@ -40,12 +47,10 @@ class MongoEventStoreIntegrationTest extends TestCase
      */
     private function findEventsInDb(string $aggregateId): array
     {
-        $cursor = $this->mongoConnection->getDatabase()
-            ->selectCollection($this->collectionName)
-            ->find(
-                ['aggregate_id' => $aggregateId],
-                ['sort' => ['sequence_number' => 1]]
-            );
+        $cursor = $this->collection->find(
+            ['aggregate_id' => $aggregateId],
+            ['sort' => ['sequence_number' => 1]]
+        );
         return $cursor->toArray();
     }
 
@@ -259,5 +264,59 @@ class MongoEventStoreIntegrationTest extends TestCase
         $this->assertEmpty($savedEvents); // Nenhum evento deve ser retornado
         $dbEvents = $this->findEventsInDb($ticketId);
         $this->assertCount(1, $dbEvents); // Apenas o evento original deve estar no DB
+    }
+
+    /** @test */
+    public function save_aborts_transaction_on_insert_failure_and_throws_exception(): void
+    {
+        // Arrange
+        $aggregateId = 'tx-abort-test-1';
+
+        // Cria um ticket com um evento (TicketCreated - sequence 1)
+        $ticket = Ticket::create($aggregateId, 'Transaction Test', 'Desc', 'low');
+        $this->eventStore->save($ticket); // Salva o estado inicial
+        $this->assertEquals(1, $this->collection->countDocuments(['aggregate_id' => $aggregateId]));
+
+        // Arrange
+        $loadedTicket = $this->eventStore->load($aggregateId);
+        $loadedTicket->resolve(); // Agora TicketResolved está pronto para ser salvo (sequence 2)
+
+        // Arrange
+        // Usamos o mock do Laravel para substituir a instância da Collection no container
+        // APENAS para este teste.
+        $mockCollection = $this->mock(Collection::class);
+        /** @var \Mockery\MockInterface|Collection $mockCollection */
+        $mockCollection->shouldReceive('insertMany')
+            ->once()
+            ->andThrow(new BulkWriteException('Simulated insertMany failure'));
+
+        // Adiciona a expectativa para findOne, que é chamado por getLastSequenceNumber
+        $mockCollection->shouldReceive('findOne')
+            ->once()
+            ->with(['aggregate_id' => $aggregateId], \Mockery::subset(['sort' => ['sequence_number' => -1]]))
+            ->andReturn(['sequence_number' => 1]);
+
+        // Obtém a conexão real do container
+        $realConnection = $this->app->make(MongoConnection::class);
+
+        // Instancia o MongoEventStore manualmente, injetando a conexão REAL
+        // e a Collection MOCKADA. Isso permite que a gestão da transação (getClient, startSession)
+        // use a conexão real, mas as operações na coleção (findOne, insertMany) usem o mock.
+        $eventStoreWithMock = new MongoEventStore($realConnection, $mockCollection);
+
+        // Assert: Espera a exceção específica do Event Store
+        $this->expectException(EventPersistenceFailedException::class);
+        $this->expectExceptionMessage("Falha ao salvar eventos para o agregado tx-abort-test-1.");
+
+        // Act: Tenta salvar o ticket com o novo evento (Resolved)
+        // A operação insertMany dentro do save() deve falhar devido ao mock
+        $eventStoreWithMock->save($loadedTicket);
+
+        // Assert extra
+        // Verifica se o evento TicketResolved (sequence 2) NÃO foi persistido no DB real
+        $finalCount = $this->mongoConnection->getDatabase()
+            ->selectCollection($this->collectionName)
+            ->countDocuments(['aggregate_id' => $aggregateId]);
+        $this->assertEquals(1, $finalCount, "A transação não foi abortada corretamente. O evento TicketResolved foi salvo indevidamente no DB real.");
     }
 }

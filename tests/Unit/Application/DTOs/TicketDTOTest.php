@@ -28,32 +28,26 @@ class TicketDTOTest extends TestCase
     }
 
     /** @test */
-    public function with_status_updates_status_correctly(): void
+    public function mark_as_resolved_creates_new_resolved_dto_correctly(): void
     {
-        $newDto = $this->baseDto->withStatus(Status::RESOLVED);
-
-        $this->assertSame(Status::RESOLVED, $newDto->status);
-        // Check other properties remain unchanged
-        $this->assertSame($this->baseDto->id, $newDto->id);
-        $this->assertSame($this->baseDto->title, $newDto->title);
-        $this->assertSame($this->baseDto->createdAt, $newDto->createdAt);
-    }
-
-    /** @test */
-    public function with_status_sets_resolved_at_when_status_becomes_resolved_and_date_is_provided(): void
-    {
+        // Arrange
         $resolveDate = new DateTimeImmutable('2024-05-10 15:00:00');
-        $newDto = $this->baseDto->withStatus(Status::RESOLVED, $resolveDate);
 
+        // Act
+        $newDto = $this->baseDto->markAsResolved($resolveDate);
+
+        // Assert - Immutability (New Instance)
+        $this->assertNotSame($this->baseDto, $newDto, 'Should return a new instance.');
+
+        // Assert - Correct State
         $this->assertSame(Status::RESOLVED, $newDto->status);
         $this->assertEquals($resolveDate, $newDto->resolvedAt);
-    }
 
-    /** @test */
-    public function with_status_returns_a_new_instance(): void
-    {
-        $newDto = $this->baseDto->withStatus(Status::RESOLVED);
-
-        $this->assertNotSame($this->baseDto, $newDto);
+        // Assert - Unchanged Properties
+        $this->assertSame($this->baseDto->id, $newDto->id);
+        $this->assertSame($this->baseDto->title, $newDto->title);
+        $this->assertSame($this->baseDto->description, $newDto->description);
+        $this->assertSame($this->baseDto->priority, $newDto->priority);
+        $this->assertSame($this->baseDto->createdAt, $newDto->createdAt);
     }
 }

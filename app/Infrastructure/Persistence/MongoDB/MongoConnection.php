@@ -3,10 +3,9 @@
 namespace App\Infrastructure\Persistence\MongoDB;
 
 use App\Infrastructure\Persistence\Exceptions\MongoConnectionException;
+use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use MongoDB\Client;
 use MongoDB\Database;
-use RuntimeException;
-
 class MongoConnection
 {
     private Client $client;
@@ -15,15 +14,17 @@ class MongoConnection
     /**
      * MongoConnection constructor.
      * Establishes the connection to the MongoDB server.
+     * @param ConfigRepository $config
      */
-    public function __construct()
+    public function __construct(ConfigRepository $config)
     {
-        $host = env('DB_HOST', '127.0.0.1');
-        $port = env('DB_PORT', 27017);
-        $this->databaseName = env('DB_DATABASE', 'tickets');
-        $username = env('DB_USERNAME');
-        $password = env('DB_PASSWORD');
-        $options = env('DB_OPTIONS', '');
+        // Ler a configuração do repositório injetado
+        $host = $config->get('database.connections.mongodb.host', '127.0.0.1');
+        $port = $config->get('database.connections.mongodb.port', 27017);
+        $this->databaseName = $config->get('database.connections.mongodb.database', 'tickets');
+        $username = $config->get('database.connections.mongodb.username');
+        $password = $config->get('database.connections.mongodb.password');
+        $optionsArray = $config->get('database.connections.mongodb.options', []); // Espera um array de opções
 
         $authPart = '';
         if ($username) {
@@ -34,13 +35,19 @@ class MongoConnection
             $authPart .= '@'; // Adiciona o @ no final da autenticação
         }
 
+        // Constrói a string de opções a partir do array
+        $optionsString = '';
+        if (!empty($optionsArray)) {
+            $optionsString = http_build_query($optionsArray);
+        }
+
         // Build the DSN string
         $dsn = sprintf(
             'mongodb://%s%s:%d%s', // Formato: mongodb://[auth]host:port[/?options]
             $authPart, // %s -> string de autenticação (pode ser vazia)
             $host, // %s -> host (string)
             $port, // %d -> porta (inteiro)
-            $options ? '/?' . $options : '' // %s -> opções (pode ser vazia)
+            $optionsString ? '/?' . $optionsString : '' // %s -> opções construídas
         );
 
         try {

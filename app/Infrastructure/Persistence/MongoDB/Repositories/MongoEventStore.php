@@ -6,8 +6,6 @@ use App\Domain\Entities\Ticket;
 use App\Domain\Events\DomainEvent;
 use App\Domain\Exceptions\AggregateNotFoundException;
 use App\Domain\Interfaces\Repositories\TicketEventStoreInterface;
-use App\Domain\ValueObjects\Priority;
-use App\Domain\ValueObjects\Status;
 use App\Infrastructure\Persistence\Exceptions\EventClassNotFoundException;
 use App\Infrastructure\Persistence\Exceptions\EventInstantiateFailedException;
 use App\Infrastructure\Persistence\Exceptions\EventLoadFailedException;
@@ -19,7 +17,6 @@ use MongoDB\BSON\UTCDateTime;
 use MongoDB\BSON\ObjectId;
 use DateTimeImmutable;
 use Exception;
-use ReflectionNamedType;
 use ReflectionParameter;
 use Throwable;
 
@@ -31,35 +28,21 @@ class MongoEventStore implements TicketEventStoreInterface
 {
     private Collection $collection; // Armazena a coleção MongoDB
     private const COLLECTION_NAME = 'ticket_events'; // Nome da coleção para os eventos
-    private array $valueObjectFactories;
 
     /**
      * Construtor que injeta a classe MongoConnection personalizada.
      *
      * @param MongoConnection $connection Classe de conexão singleton.
+     * @param Collection|null $collectionOverride Permite injetar uma coleção (para testes).
      */
     public function __construct(
-        private MongoConnection $connection
+        private MongoConnection $connection,
+        private ?Collection $collectionOverride = null // Adicionado para testes
     ) {
         // Obtém a coleção 'ticket_events' usando a conexão injetada
-        $this->collection = $this->connection
+        $this->collection = $this->collectionOverride ?? $this->connection
             ->getDatabase()
             ->selectCollection(self::COLLECTION_NAME);
-
-        // Inicializa o mapeamento de VOs
-        $this->initializeValueObjectFactories();
-    }
-
-    /**
-     * Inicializa o mapeamento de fábricas de Value Objects.
-     * Facilita a adição de novos VOs sem alterar a lógica principal de instanciação.
-     */
-    private function initializeValueObjectFactories(): void
-    {
-        $this->valueObjectFactories = [
-            Status::class => fn($value) => new Status($value),
-            Priority::class => fn($value) => new Priority((int)$value)
-        ];
     }
 
     /**
@@ -145,7 +128,7 @@ class MongoEventStore implements TicketEventStoreInterface
             // Usa o método estático do agregado para reconstruir seu estado a partir do histórico de eventos
             return Ticket::reconstituteFromHistory($aggregateId, $history);
 
-        } catch (MongoDBDriverException | AggregateNotFoundException $e) {
+        } catch (MongoDBDriverException | AggregateNotFoundException | EventClassNotFoundException | EventInstantiateFailedException $e) {
             // Relança exceções específicas ou do driver
             throw $e;
         } catch (Throwable $e) {
@@ -305,7 +288,6 @@ class MongoEventStore implements TicketEventStoreInterface
         ?string $eventId = null
     ): mixed {
         $paramName = $param->getName();
-        $paramType = $param->getType();
         $resolvedValue = null;
 
         // --- Lógica específica para parâmetros especiais ---
@@ -321,18 +303,6 @@ class MongoEventStore implements TicketEventStoreInterface
             if (array_key_exists($paramName, $payload)) {
                 $valueFromPayload = $payload[$paramName];
                 $resolvedValue = $valueFromPayload;
-
-                // Tentar instanciar como Value Object, se aplicável
-                if ($paramType instanceof ReflectionNamedType && !$paramType->isBuiltin()) {
-                    $typeName = $paramType->getName();
-                    // Verifica se existe uma fábrica registrada para este tipo de VO
-                    if (isset($this->valueObjectFactories[$typeName])) {
-                        // Chama a função de fábrica correspondente
-                        return ($this->valueObjectFactories[$typeName])($valueFromPayload);
-                    }
-                    // Se não for um VO conhecido, $resolvedValue mantém o valor do payload
-                }
-                // Se for um tipo primitivo, $resolvedValue já contém o valor do payload
             }
             // Se a chave não existe no payload, $resolvedValue permanece null
         }

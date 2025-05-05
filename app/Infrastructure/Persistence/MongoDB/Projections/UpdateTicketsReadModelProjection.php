@@ -135,8 +135,7 @@ class UpdateTicketsReadModelProjection implements ShouldQueue
                 createdAt: $domainEvent->getOccurredOn(),
                 resolvedAt: null
             ),
-            TicketResolved::class => $currentDto ? $currentDto->withStatus(
-                Status::RESOLVED,
+            TicketResolved::class => $currentDto ? $currentDto->markAsResolved(
                 $domainEvent->getOccurredOn() // Passa a data de resolução
             ) : null, // Não faz sentido resolver um ticket que não foi criado
             default => $currentDto, // Se o evento não for reconhecido, retorna o DTO atual sem modificação

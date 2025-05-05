@@ -3,6 +3,7 @@
 namespace Tests\Unit\Infrastructure\Messaging\Kafka\Listeners;
 
 use App\Application\Events\DomainEventsPersisted;
+use App\Domain\Events\DomainEvent;
 use App\Domain\Events\TicketCreated;
 use App\Domain\Events\TicketResolved;
 use App\Infrastructure\Messaging\Kafka\Listeners\PublishDomainEventsToKafka;
@@ -305,6 +306,61 @@ class PublishDomainEventsToKafkaTest extends TestCase
         $this->listener->handle($appEvent);
 
         // Assert (implicit)
+        $this->assertTrue(true);
+    }
+
+    /** @test */
+    public function it_logs_error_and_continues_if_json_encode_fails(): void
+    {
+        // Arrange: Create a mock event that returns invalid UTF-8 data
+        $aggregateId = 'json-fail-789';
+        $eventId = 'event-json-fail-' . Str::uuid()->toString();
+
+        $mockEvent = Mockery::mock(DomainEvent::class);
+        $mockEvent->shouldReceive('getAggregateId')->andReturn($aggregateId);
+        $mockEvent->shouldReceive('getEventId')->andReturn($eventId);
+        $mockEvent->shouldReceive('getOccurredOn')->andReturn(new DateTimeImmutable());
+        // Payload with invalid UTF-8 sequence
+        $mockEvent->shouldReceive('toPayload')->andReturn(['bad_data' => "\xB1\x31"]);
+
+        $appEvent = new DomainEventsPersisted([$mockEvent], $aggregateId, 'Ticket');
+
+        Config::shouldReceive('get')
+            ->with('kafka.topics.ticket-events.topic', null)
+            ->once()
+            ->andReturn($this->testTopic);
+        Config::shouldReceive('get')
+            ->with('kafka.topics.ticket-events.broker', null)
+            ->once()
+            ->andReturn($this->testBroker);
+
+        // Expect cache check to return false (event not processed yet)
+        $this->mockCacheManager->shouldReceive('has')
+            ->with(Mockery::pattern(self::EVENT_KAFKA_PATTERN.$eventId.'/'))
+            ->once()
+            ->andReturnFalse();
+
+        // Expect Log::error to be called due to json_encode failure
+        Log::shouldReceive('error')
+            ->once()
+            ->with(
+                'Falha ao serializar payload do evento para JSON',
+                Mockery::on(function ($context) use ($aggregateId, $mockEvent) {
+                    return isset($context['event']) && $context['event'] === get_class($mockEvent) &&
+                           isset($context['aggregateId']) && $context['aggregateId'] === $aggregateId;
+                })
+            );
+
+        // Assert that Kafka::publish is NEVER called because of the 'continue'
+        Kafka::shouldReceive('publish')->never();
+
+        // Assert that cache->put is NEVER called because the processing loop continues
+        $this->mockCacheManager->shouldReceive('put')->never();
+
+        // Act
+        $this->listener->handle($appEvent);
+
+        // Assert (implicit via Mockery expectations)
         $this->assertTrue(true);
     }
 }

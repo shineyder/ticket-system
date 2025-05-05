@@ -4,12 +4,15 @@ namespace App\Infrastructure\Providers;
 
 use App\Domain\Interfaces\Repositories\TicketEventStoreInterface;
 use App\Domain\Interfaces\Repositories\TicketReadRepositoryInterface;
+use App\Infrastructure\Persistence\Exceptions\MongoConnectionException;
 use App\Infrastructure\Persistence\Cache\CachingTicketReadRepository;
 use App\Infrastructure\Persistence\MongoDB\MongoConnection;
 use App\Infrastructure\Persistence\MongoDB\Repositories\MongoEventStore;
 use App\Infrastructure\Persistence\MongoDB\Repositories\MongoTicketReadRepository;
+use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Cache\CacheManager;
 use Illuminate\Support\ServiceProvider;
+use Exception;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,8 +22,13 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         // Bind MongoConnection as a singleton to reuse the connection
-        $this->app->singleton(MongoConnection::class, function () {
-            return new MongoConnection();
+        $this->app->singleton(MongoConnection::class, function ($app) {
+            try {
+                // Resolve a dependência ConfigRepository e passa para o construtor
+                return new MongoConnection($app->make(ConfigRepository::class));
+            } catch (Exception $e) { // Captura qualquer exceção na construção
+                throw new MongoConnectionException("Falha ao registrar MongoConnection: " . $e->getMessage(), 0, $e);
+            }
         });
 
         // Bind da interface do Event Store para a implementação MongoDB

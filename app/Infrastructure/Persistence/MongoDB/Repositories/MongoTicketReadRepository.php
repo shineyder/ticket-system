@@ -121,7 +121,7 @@ class MongoTicketReadRepository implements TicketReadRepositoryInterface
         return new TicketDTO(
             $data['ticket_id'],
             $data['title'] ?? '',
-            $data['description'] ?? null,
+            $data['description'],
             $data['priority'] ?? 'low',
             $data['status'] ?? 'open',
             $createdAt,
